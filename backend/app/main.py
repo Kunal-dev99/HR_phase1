@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, FastAPI
 
+from app.core.correlation import CorrelationIdMiddleware
+from app.core.logging import configure_logging
 from app.core.settings import Settings, ensure_safe_configuration, get_settings
 
 API_V1_PREFIX = "/api/v1"
@@ -35,7 +37,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
         openapi_url=None,
     )
+    configure_logging()
     app.state.settings = settings
+    app.add_middleware(CorrelationIdMiddleware)
     app.include_router(health_router)
     return app
 
