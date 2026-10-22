@@ -26,7 +26,7 @@ shortlist back to the HR System — for recruiters and hiring teams.
 | Area | Choice | Status |
 |---|---|---|
 | Backend | Python + FastAPI, SQLAlchemy 2.0 (async), Alembic | From spec §2 |
-| Database | PostgreSQL | From spec §2 |
+| Database | PostgreSQL (spec §2; pilot/production). Local dev default: SQLite file via `aiosqlite`; PostgreSQL-only safeguards (audit triggers, row-lock claim) exist only on PostgreSQL | From spec §2; SQLite local default D-26 (Phase 5 planned) |
 | Background work | DB-backed state machine + queue workers (Celery/RQ + Redis); Temporal only if needed | Open (spec §15.9) |
 | Object storage | S3-compatible or Azure Blob | Open (hosting) |
 | Frontend | React + TypeScript on Next.js (App Router), in `frontend/`; local dev only for now | Agreed (D-20) |

@@ -743,3 +743,225 @@ Numbered from Q-10 so they do not collide with the Requisitions Q-1…Q-9.
   bundle". Under D-20 the in-repo `frontend/src/components/ui/` set is that design system.
   The agent file is outside the architect's ownership. Should its owner update the wording
   to point at D-20?
+
+---
+
+## Feature: SQLite default database
+
+- **Kickoff:** `docs/prompts/kickoffs/2026-10-22-sqlite-default.md`
+- **Plan status:** AWAITING APPROVAL. D-26 is Accepted (user decisions, 2026-10-22).
+  D-27…D-30 are "Proposed — awaiting approval". The defaults below make the plan
+  buildable. If approval changes a default, I amend the affected tasks before the build
+  starts.
+- **Plan author:** solution-architect, 2026-10-22
+- **Starting point:** `master` = `6e1bc77`. PostgreSQL-specific code (verified by Grep and
+  Read):
+  - migrations `0001_audit_event` (`gen_random_uuid()`, `clock_timestamp()`, the plpgsql
+    function, and the UPDATE/DELETE and TRUNCATE triggers) and `0002_requisitions`
+    (JSONB, `ARRAY(String(64))` with default `'{}'::varchar[]`);
+  - models in `audit`, `requisitions` and `integrations` (JSONB, ARRAY, and
+    `server_default` text for UUIDs and timestamps);
+  - `requisitions/repository.py` (`postgresql.insert … on_conflict_do_update`,
+    `func.clock_timestamp()` in upsert and `transition`, and `func.make_interval` in
+    `list_stale_ids`);
+  - `scripts/dev_precheck.py` (asyncpg ping), `backend-start.bat` messages, and
+    `backend/.env.example`.
+
+  `app/core/db_guard.py` checks `make_url(url).database` for a `_copy`/`_test` suffix,
+  which on SQLite would be a path such as `./x_copy.db` and so would always be refused.
+  `tests/conftest.py` builds its own engine with `create_async_engine`.
+- **Task ID scheme:** this continues the global phase sequence. Requisitions used Phases
+  0–2 and MVP UI used Phases 3–4, so this feature is **Phase 5** (BE-5.x). One phase is
+  enough.
+- **Testing level (D-18):** `ruff check .`, `mypy app`, `pytest` and the migration round
+  trip, on SQLite and once on PostgreSQL. The phase adds two tests
+  (`test_foreign_keys_are_enforced` and `test_sqlite_file_name_must_be_copy`) and one manual
+  smoke check. PostgreSQL-only tests are skipped on SQLite (D-30) and are not rewritten.
+
+### Standing-rule compliance (applies to every task below)
+
+- **D-01:**
+  - No table, column, endpoint or page is removed. PostgreSQL DDL stays byte-identical,
+    which BE-5.5 proves with an offline SQL diff.
+  - The only exception is editing migrations 0001 and 0002 in place, named in
+    **PROPOSED (D-27)**.
+  - asyncpg stays installed, and aiosqlite is added.
+- **D-02:** the new behaviour sits behind a setting. `DATABASE_URL` selects the dialect,
+  and a PostgreSQL URL restores today's behaviour. The migration round trip is run on both
+  dialects. Nothing is deleted.
+- **D-03:**
+  - Worktree `/home/user/HR_phase1-worktrees/sqlite-default-phase5`.
+  - SQLite copies are files under the worktree's `backend/`:
+    `hr_phase1_sqlite_copy.db` (dev/manual) and `hr_phase1_sqlite_test.db` (pytest).
+  - The PostgreSQL check uses the existing copy `hr_phase1_mvpui_copy`.
+  - The guard (BE-5.6) accepts only files whose stem ends in `_copy` or `_test`.
+- **D-04:** no endpoint or permission changes. Row scoping stays in
+  `principal_scope_filter`, which uses only `IN` and `IS NULL`, so it is portable as is.
+  On SQLite the D-12/D-15 audit triggers are absent by user decision (D-26). Audit
+  immutability rests on the insert-only `AuditService`/repository.
+
+---
+
+### Phase 5 — SQLite as the default local database (PostgreSQL still supported)
+
+Goal: the backend, migrations and test suite run on a local SQLite file by default.
+Switching `DATABASE_URL` back to a PostgreSQL copy gives exactly today's schema and
+behaviour.
+**Precondition:** none (MVP UI is complete on `master`).
+
+- [ ] BE-5.1 Isolation setup and PostgreSQL baseline (D-03). Create worktree
+  `/home/user/HR_phase1-worktrees/sqlite-default-phase5` on branch
+  `feature/sqlite-default-phase5` from `master` (`6e1bc77`). In the worktree, set
+  `backend/.env` to the PostgreSQL copy `hr_phase1_mvpui_copy` for the baseline. Before any
+  code change, capture the offline PostgreSQL SQL into the session scratchpad:
+  `alembic upgrade base:head --sql > pg_upgrade_before.sql` and
+  `alembic downgrade head:base --sql > pg_downgrade_before.sql`. BE-5.5 diffs against
+  these files.
+  Done-when: the report shows `git worktree list` with the Phase 5 path, `alembic current` on `hr_phase1_mvpui_copy` showing `0002_requisitions (head)`, and the two baseline files with their line counts.
+- [ ] BE-5.2 Driver and locks (D-17). Add `aiosqlite>=0.20,<1` to `dependencies` in
+  `backend/pyproject.toml`, keeping `asyncpg`. Regenerate `backend/requirements.lock` and
+  `backend/requirements-dev.lock` with the `pip-compile` commands in the pyproject header,
+  then reinstall the worktree `.venv` from `requirements-dev.lock`.
+  Done-when: Grep finds `aiosqlite==` and `asyncpg==` in both lock files, and `python -c "import aiosqlite, asyncpg"` exits 0 in the worktree venv.
+- [ ] BE-5.3 Engine factory and portable column types in `app/core/db.py`
+  (**PROPOSED (D-28)**, **PROPOSED (D-29)**). This adds no new core file.
+  - `make_engine(url, **kw)`. On PostgreSQL it is unchanged (`pool_pre_ping=True`). On
+    SQLite it adds a `connect` listener that runs `PRAGMA foreign_keys=ON` and sets
+    `isolation_level=None`, plus a `begin` listener that emits `BEGIN`. This is the
+    SQLAlchemy pysqlite recipe, so SAVEPOINTs and transactional DDL work. It also sets a
+    15 s busy timeout and registers a `sqlite3` adapter that binds `uuid.UUID` as 32-char
+    hex, which matches how `sa.Uuid` stores UUIDs on SQLite, so raw `text()` binds work.
+  - Portable types:
+    - `JSONType` is `JSON` with a JSONB variant on PostgreSQL.
+    - `StringList(n)` is `JSON` with an `ARRAY(String(n))` variant on PostgreSQL.
+    - `UTCDateTime` is a `TypeDecorator` over `DateTime(timezone=True)`. It binds as
+      aware UTC and returns aware UTC, attaching UTC when SQLite hands back a naive value.
+    - `utc_now()` returns `datetime.now(UTC)`.
+  - `get_engine()`, `alembic/env.py` (online path) and `tests/conftest.py::db_connection`
+    use `make_engine`.
+
+  Done-when: new test `test_foreign_keys_are_enforced` in `backend/tests/test_schema.py` (inserting a `requisition_snapshot` with an unknown `requisition_id` raises `IntegrityError`) passes on SQLite (`DATABASE_URL=sqlite+aiosqlite:///./hr_phase1_sqlite_test.db`) and on `hr_phase1_mvpui_copy`, and `mypy app` passes.
+- [ ] BE-5.4 Dialect-neutral models and repository (**PROPOSED (D-28)**).
+  - **Models:** `audit/models.py`, `requisitions/models.py` and `integrations/models.py`
+    use `JSONType`, `StringList(c.BUSINESS_UNIT_KEY_MAX)` and `UTCDateTime`. Columns that
+    had a `clock_timestamp()` server default get `default=utc_now`, and
+    `scope_business_units` gets `default=list`. The PostgreSQL-only `server_default`
+    texts are removed from the ORM models only. DDL comes from the migrations, so the
+    database schema does not change.
+  - **Repository:** `RequisitionRepository.upsert` picks
+    `sqlalchemy.dialects.sqlite.insert` or `postgresql.insert` from
+    `session.get_bind().dialect.name`. Both use the same `on_conflict_do_update(...)` and
+    `.returning(...)`. `func.clock_timestamp()` in `upsert` and `transition` becomes a
+    bound `utc_now()`. `list_stale_ids` computes
+    `cutoff = utc_now() - timedelta(seconds=older_than_seconds)` in Python. The claim
+    stays `UPDATE … WHERE status='created' RETURNING` (D-06, D-26).
+
+  Done-when: Grep finds no `clock_timestamp`, `make_interval`, `gen_random_uuid` or `dialects.postgresql` under `backend/app/modules/`, and `pytest tests/test_requisition_repository.py tests/test_ingestion.py` passes on the SQLite test file.
+- [ ] BE-5.5 Dialect-aware migrations in place (**PROPOSED (D-27)**, D-01 exception).
+  - In `0001_audit_event.py` and `0002_requisitions.py`, branch on
+    `op.get_context().dialect.name`.
+  - **PostgreSQL:** the emitted SQL is unchanged.
+  - **SQLite:**
+    - `sa.JSON()` replaces JSONB.
+    - `sa.JSON()` with server default `'[]'` replaces the varchar array.
+    - There is no `gen_random_uuid()` or `clock_timestamp()` server default. The app
+      supplies these values (D-28).
+    - The plpgsql function and the triggers are not created, and downgrade does not drop
+      them.
+  - Revision IDs and `down_revision` stay the same.
+
+  Done-when: with the PostgreSQL URL, `alembic upgrade base:head --sql` and `alembic downgrade head:base --sql` give an empty `diff` against the BE-5.1 baseline files; on the SQLite copy file, `alembic upgrade head`, `downgrade -1`, `upgrade head`, `downgrade base`, `upgrade head` all exit 0 and `alembic current` shows `0002_requisitions (head)`.
+- [ ] BE-5.6 Copy guard, precheck, start script, env default and ignore rules
+  (**PROPOSED (D-29)**).
+  - **Guard:** `app/core/db_guard.py` applies the `_copy`/`_test` rule to the file stem
+    (`Path(database).stem`) when the URL's backend is `sqlite`. An empty path,
+    `:memory:`, or a bare `_copy.db` is refused. PostgreSQL behaviour is unchanged.
+  - **Precheck:** `scripts/dev_precheck.py` gets a SQLite branch with no server
+    connection. It checks that the parent directory exists and is writable, and that
+    `sqlite3.sqlite_version >= 3.35` (needed for RETURNING). It prints whether the file
+    already exists or "will be created by alembic upgrade head". The asyncpg ping stays
+    for PostgreSQL.
+  - **`backend-start.bat`:** the step-5 comment and the `.env`-missing and precheck-failure
+    messages name SQLite as the default and PostgreSQL as the alternative. The step logic
+    is unchanged.
+  - **`backend/.env.example`:** `DATABASE_URL=sqlite+aiosqlite:///./hr_phase1_dev_copy.db`,
+    with the PostgreSQL URL kept as a commented example.
+  - **Root `.gitignore`:** add `*.db`, `*.db-journal`, `*.db-wal` and `*.db-shm`.
+
+  Done-when: new test `test_sqlite_file_name_must_be_copy` in `backend/tests/test_db_guard.py` passes (accepts `hr_phase1_dev_copy.db`, refuses `hr_phase1.db` and `:memory:`); `python scripts/dev_precheck.py` with the SQLite `.env` prints `[precheck] OK`; `git check-ignore backend/hr_phase1_sqlite_copy.db` prints the path.
+- [ ] BE-5.7 PostgreSQL-only test marker (**PROPOSED (D-30)**). Register the marker
+  `pg_only` under `[tool.pytest.ini_options] markers` (the suite uses `--strict-markers`).
+  `tests/conftest.py` skips `pg_only` items when the `DATABASE_URL` dialect is not
+  `postgresql`, with the reason "PostgreSQL-only safeguard or SQL (D-26)". Mark the
+  following tests and do not rewrite them:
+  - `test_audit.py::test_audit_event_is_append_only` (trigger and TRUNCATE);
+  - `test_run_scoping.py::test_claim_is_single_winner` (row lock);
+  - `test_ingestion.py::test_every_transition_has_audit_event_in_same_transaction` (xmin);
+  - `test_schema.py::test_screening_run_status_has_no_check_constraint` (`pg_constraint`);
+  - `migrations/test_round_trip.py`, both tests (`to_regclass`, `pg_tables`);
+  - `test_hr_mock_adapter.py::test_integration_attempt_recorded_without_payload`
+    (`row_to_json`);
+  - `test_executor.py::test_startup_recovery_redispatches_created_and_blocks_stale`
+    (`now() - interval`);
+  - `test_snapshot_store.py::test_tampered_payload_raises` (`jsonb_set`).
+
+  If any other test fails on SQLite only because of PostgreSQL SQL, the engineer may mark
+  it the same way and must name it in the report.
+  Done-when: on the SQLite test file `pytest -ra` passes with exactly the marked tests listed as skipped; on `hr_phase1_mvpui_copy` `pytest -ra` passes with 0 skipped.
+
+- [ ] **Phase 5 Done-when:** in the Phase 5 worktree, the engineers report real output for
+  each item below.
+  - **(a) On SQLite** (`DATABASE_URL=sqlite+aiosqlite:///./hr_phase1_sqlite_test.db`):
+    `ruff check .`, `mypy app` and `pytest -ra` pass, with only `pg_only` tests skipped.
+    `alembic upgrade head → downgrade -1 → upgrade head` exits 0 on
+    `hr_phase1_sqlite_copy.db`.
+  - **(b) On PostgreSQL** (`hr_phase1_mvpui_copy`): the full `pytest -ra` passes with 0
+    skipped, the round-trip tests included. The migration round trip runs and the BE-5.5
+    offline SQL diff is empty.
+  - **(c) Manual smoke check:** start the backend from the worktree with
+    `scripts/start-backend.sh`, using the default `.env.example` URL pointed at
+    `hr_phase1_sqlite_copy.db`, `FEATURE_SCREENING_RUNS=true`, `AUTH_MODE=dev_header` and
+    `HR_SYSTEM_ADAPTER=mock`. POST `/api/v1/screening-runs`
+    `{"external_requisition_id":"REQ-OPEN-1"}` returns 202. GET on the `status_url`
+    returns `status: role_brief_draft`, with timestamps carrying a UTC offset.
+  - The user checks `backend-start.bat` once on Windows (Q-20).
+
+**Reversibility:**
+- Set `DATABASE_URL` back to a `postgresql+asyncpg://…_copy` URL. No code change is
+  needed. The PostgreSQL DDL is byte-identical (BE-5.5 diff), so existing PostgreSQL copies
+  at `0002_requisitions` need no migration action, and the full suite runs there unskipped.
+- Reverting the branch restores the PostgreSQL-only code. The `.env.example` default goes
+  back to the PostgreSQL placeholder. The added lock entries and `.gitignore` lines are
+  harmless if left.
+- SQLite copy files stay on disk, gitignored, and are never deleted by the plan.
+- What remains afterwards on SQLite: no DB-level audit immutability and no row-lock claim
+  (D-26).
+
+**Deferred from Phase 5:**
+- SQLite triggers for audit append-only (`BEFORE UPDATE/DELETE … RAISE(ABORT)`). The user
+  decided app-level only (D-26). See Q-18.
+- Portable rewrites of the `pg_only` tests (D-18).
+- CI running the suite on both dialects.
+- WAL mode and multi-process access to the SQLite file.
+- A data copy tool from SQLite to PostgreSQL. Pilot starts on a fresh PostgreSQL database.
+- SQLite in staging, pilot or production. Not supported.
+
+### Open questions for approval (SQLite default)
+
+Numbered from Q-17 so they do not collide with Q-1…Q-16.
+
+- **Q-17** Approve or amend D-27…D-30. Defaults: edit 0001/0002 in place, use the app
+  clock on both dialects, use the connection setup and guard as written, and use the
+  `pg_only` marker.
+- **Q-18** Confirm there should be no SQLite audit trigger. Adding one would be about six
+  lines in 0001's SQLite branch and would give DB-level immutability on SQLite too. The
+  default follows your decision 2: app level only.
+- **Q-19** pytest on SQLite uses a separate `hr_phase1_sqlite_test.db`, set through the
+  `DATABASE_URL` environment variable, so tests never share the file the running backend
+  uses. Should `conftest.py` switch to that file automatically when `.env` points at a
+  SQLite `_copy` file? The default is no: tests use an explicit env var, as today.
+- **Q-20** Will you check `backend-start.bat` once on Windows after Phase 5? The Linux
+  container cannot run it. This is like Q-12.
+- **Q-21** Should every later backend phase also run `pytest` on a PostgreSQL copy, so the
+  two dialects do not drift? The default is yes while `hr_phase1_mvpui_copy` exists. It
+  becomes mandatory at the D-18 revisit before pilot.

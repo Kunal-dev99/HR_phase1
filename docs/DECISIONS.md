@@ -454,6 +454,127 @@ every feature unless a later decision names an exception and the reason for it.
   with no edits, and it satisfies the frontend-engineer D-02 rule that new screens sit
   behind a flag.
 
+## D-26 SQLite is the default local database; PostgreSQL stays supported
+
+- **Status:** Accepted — user decisions, 2026-10-22
+- **Date:** 2026-10-22
+- **Feature:** SQLite default database (`docs/DELIVERY_PLAN.md`, Phase 5; kickoff
+  `docs/prompts/kickoffs/2026-10-22-sqlite-default.md`)
+- **Decision:**
+  1. **SQLite is the default for local development**, so no database install is needed.
+     `backend/.env.example` defaults to a SQLite file URL (`sqlite+aiosqlite:///…_copy.db`).
+     PostgreSQL stays supported: code and migrations remain compatible, and pilot or
+     production switches back by changing `DATABASE_URL`. This is additive under D-01.
+  2. **PostgreSQL-only safeguards stay PostgreSQL-only.** On SQLite they are enforced at
+     app level only:
+     - Audit immutability (D-12, D-15) rests on the insert-only audit repository. The
+       UPDATE/DELETE and TRUNCATE triggers exist only on PostgreSQL.
+     - The run claim (D-06) relies on the existing conditional
+       `UPDATE … WHERE status='created' RETURNING`. SQLite has no row locking.
+- **Reason:** User instruction. This is acceptable for a single-user MVP. Technical
+  Architecture §2 (PostgreSQL) still holds for pilot and production.
+- **Consequence:** On SQLite, nothing at DB level stops a direct SQL UPDATE or DELETE of
+  `audit_event`. Two processes on one SQLite file are not supported. D-18's revisit before
+  pilot includes running the full suite on PostgreSQL.
+
+## D-27 Migrations 0001 and 0002 become dialect-aware in place (D-01 exception)
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** SQLite default database (BE-5.5)
+- **Decision:** `0001_audit_event.py` and `0002_requisitions.py` are edited in place to
+  branch on `op.get_context().dialect.name`.
+  - **PostgreSQL:** the output stays byte-identical. This is proven by an empty diff of
+    `alembic upgrade base:head --sql` and `alembic downgrade head:base --sql` against a
+    baseline captured before the edit.
+  - **SQLite:**
+    - `JSON` replaces JSONB, and the varchar array.
+    - The UUID and timestamp server defaults are omitted, so the app supplies them
+      (D-28).
+    - The plpgsql function and the triggers are omitted (D-26).
+  - Revision IDs are unchanged.
+- **D-01 exception and reason:** this edits already-written migrations instead of adding
+  new ones. A new migration cannot fix this, because 0001 cannot run on SQLite at all
+  (plpgsql, `gen_random_uuid()`). Both revisions have only ever been applied to throwaway
+  `_copy` databases. Because the PostgreSQL output is unchanged, existing PostgreSQL
+  copies stay valid with no action. Nothing is dropped or altered in any database.
+- **Alternative:** a separate SQLite-only migration chain or branch label. That means two
+  histories to keep in step, and new schema written twice.
+
+## D-28 Portable column types and app-side defaults on both dialects
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** SQLite default database (BE-5.3, BE-5.4)
+- **Decision:**
+  - **Types.** These live in `app/core/db.py`, so no new core file is added (D-13):
+    - `JSONType` is `JSON` with a JSONB variant on PostgreSQL.
+    - `StringList(n)` is `JSON` with an `ARRAY(String(n))` variant on PostgreSQL.
+    - `UTCDateTime` always binds and returns timezone-aware UTC.
+  - **One code path on both dialects.** The ORM supplies `id` (`uuid4`, as today), the
+    timestamp defaults (`utc_now()`) and `scope_business_units` (`list`). The repository
+    writes `utc_now()` instead of `func.clock_timestamp()`, and computes the staleness
+    cutoff in Python instead of `make_interval`.
+  - **Upsert.** It picks the SQLite or PostgreSQL `insert … on_conflict_do_update` by
+    dialect. RETURNING is kept.
+  - **PostgreSQL DDL** keeps its server defaults (D-27). They still apply to manual SQL.
+- **Reason:** SQLite has no server-side UUID or wall-clock default that SQLAlchemy reads
+  back reliably, and it has no JSONB or arrays. A single app-side path avoids per-dialect
+  branches in services.
+- **Consequence:** On PostgreSQL, app-written timestamps come from the app host clock
+  instead of `clock_timestamp()`. Locally this is the same host. Audit `timestamp` is
+  therefore app-supplied on both dialects.
+- **Alternative:** keep the DB clock on PostgreSQL through dialect-specific compiled
+  expressions. That gives exact parity, but with two code paths.
+
+## D-29 SQLite connection setup and the copy guard for database files (extends D-16)
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** SQLite default database (BE-5.3, BE-5.6)
+- **Decision:**
+  - **Engine.** One `make_engine` builds every engine: app, Alembic and tests. On SQLite
+    it does the following on each connection:
+    - runs `PRAGMA foreign_keys=ON`;
+    - applies the SQLAlchemy pysqlite transaction recipe (`isolation_level=None` plus an
+      explicit `BEGIN`), so the test harness SAVEPOINTs and transactional DDL work;
+    - sets a 15 s busy timeout;
+    - registers a `sqlite3` adapter that binds `uuid.UUID` as 32-char hex, as `sa.Uuid`
+      stores it.
+  - **Minimum version.** SQLite 3.35 is required for RETURNING, and the precheck checks
+    it.
+  - **Copy guard.** For `sqlite` URLs the D-03/D-16 rule applies to the file stem, which
+    must end in `_copy` or `_test`. An empty path, `:memory:` and a bare `_copy.db` are
+    refused. Relative paths resolve from the process working directory, which is
+    `backend/` for the start scripts, pytest and Alembic.
+  - **Precheck.** On SQLite the precheck checks the directory and the version instead of
+    connecting to a server.
+- **Reason:** Without the pragma, SQLite silently ignores foreign keys. Without the recipe,
+  the rolled-back-transaction test harness and migration transactions misbehave under
+  pysqlite. Without the stem rule, the guard would refuse every SQLite path, or a
+  `..._copy/live.db` directory trick would pass.
+
+## D-30 PostgreSQL-only tests are marked and skipped on SQLite
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** SQLite default database (BE-5.7)
+- **Decision:**
+  - A registered pytest marker `pg_only` is skipped by `tests/conftest.py` when the
+    `DATABASE_URL` dialect is not PostgreSQL.
+  - It marks the tests that prove PostgreSQL-only safeguards or use PostgreSQL SQL: the
+    audit trigger and TRUNCATE, the row-lock claim, the xmin same-transaction proof, the
+    `pg_constraint` check, both round-trip tests, the `row_to_json` audit,
+    `now() - interval` recovery and `jsonb_set` tamper. The exact list is in BE-5.7.
+  - These tests are not rewritten. On SQLite the migration round trip is covered by the
+    Alembic CLI round trip in the phase Done-when.
+  - The full suite on a PostgreSQL copy, with 0 skipped, stays a phase gate for this
+    feature.
+- **Reason:** It is the MVP-light approach (D-18). It keeps PostgreSQL proofs intact with
+  no new test matrix.
+- **Consequence:** The SQLite run does not exercise startup recovery staleness or the
+  tamper check. The PostgreSQL run does.
+
 ---
 
 Never renumber existing IDs. New decisions are appended as D-05, D-06, …
