@@ -1,0 +1,414 @@
+{
+  "components": {
+    "schemas": {
+      "CompletionReason": {
+        "description": "Public ``completion_reason`` codes for a blocked run (D-07).",
+        "enum": [
+          "requisition_not_found",
+          "requisition_not_eligible_status",
+          "requisition_incomplete",
+          "hr_system_unavailable",
+          "hr_response_invalid",
+          "ingestion_interrupted"
+        ],
+        "title": "CompletionReason",
+        "type": "string"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "RunPhases": {
+        "properties": {
+          "phase_1": {
+            "title": "Phase 1",
+            "type": "string"
+          }
+        },
+        "required": [
+          "phase_1"
+        ],
+        "title": "RunPhases",
+        "type": "object"
+      },
+      "RunRequisitionReference": {
+        "description": "A reference to the pinned snapshot. Never the raw payload (D-11).",
+        "properties": {
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "external_requisition_id": {
+            "title": "External Requisition Id",
+            "type": "string"
+          },
+          "hr_system_key": {
+            "title": "Hr System Key",
+            "type": "string"
+          },
+          "payload_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload Hash"
+          },
+          "requisition_id": {
+            "format": "uuid",
+            "title": "Requisition Id",
+            "type": "string"
+          },
+          "snapshot_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot Id"
+          }
+        },
+        "required": [
+          "external_requisition_id",
+          "hr_system_key",
+          "requisition_id",
+          "snapshot_id",
+          "payload_hash",
+          "captured_at"
+        ],
+        "title": "RunRequisitionReference",
+        "type": "object"
+      },
+      "RunStatus": {
+        "description": "Screening-run states (Data Model §7.1). This feature drives the first three + blocked.",
+        "enum": [
+          "created",
+          "ingesting_requisition",
+          "role_brief_draft",
+          "awaiting_role_approval",
+          "role_configuration",
+          "awaiting_configuration_approval",
+          "sourcing",
+          "candidate_pool_ready",
+          "evaluating_profiles",
+          "assessment_processing",
+          "shortlist_ready",
+          "writing_back_to_hr",
+          "completed",
+          "completed_with_exceptions",
+          "blocked",
+          "cancelled"
+        ],
+        "title": "RunStatus",
+        "type": "string"
+      },
+      "ScreeningRunAccepted": {
+        "properties": {
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatus"
+          },
+          "status_url": {
+            "title": "Status Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "status_url",
+          "correlation_id"
+        ],
+        "title": "ScreeningRunAccepted",
+        "type": "object"
+      },
+      "ScreeningRunCreateRequest": {
+        "additionalProperties": false,
+        "description": "POST body: the HR System's requisition ID (not an internal UUID). Extra fields 422.",
+        "properties": {
+          "external_requisition_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "External Requisition Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "external_requisition_id"
+        ],
+        "title": "ScreeningRunCreateRequest",
+        "type": "object"
+      },
+      "ScreeningRunStatusResponse": {
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "completion_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CompletionReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "correlation_id": {
+            "title": "Correlation Id",
+            "type": "string"
+          },
+          "phases": {
+            "$ref": "#/components/schemas/RunPhases"
+          },
+          "requisition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RunRequisitionReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatus"
+          },
+          "status_details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Details"
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "phases",
+          "completion_reason",
+          "status_details",
+          "requisition",
+          "started_at",
+          "completed_at",
+          "correlation_id"
+        ],
+        "title": "ScreeningRunStatusResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "AI-Enabled Recruitment Screening System",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/screening-runs": {
+      "post": {
+        "operationId": "create_screening_run_api_v1_screening_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreeningRunCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreeningRunAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Screening Run",
+        "tags": [
+          "screening-runs"
+        ]
+      }
+    },
+    "/api/v1/screening-runs/{run_id}": {
+      "get": {
+        "operationId": "get_screening_run_api_v1_screening_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreeningRunStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Screening Run",
+        "tags": [
+          "screening-runs"
+        ]
+      }
+    },
+    "/healthz": {
+      "get": {
+        "description": "Liveness probe. Public by design: listed in ``PUBLIC_ROUTES``.",
+        "operationId": "healthz_healthz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Healthz Healthz Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Healthz",
+        "tags": [
+          "health"
+        ]
+      }
+    }
+  }
+}
