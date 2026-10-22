@@ -9,8 +9,10 @@ Repositories flush but never commit; the caller owns the unit of work.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
-from typing import Any
+from typing import Any, Protocol
 
 from sqlalchemy import ColumnElement, and_, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -19,7 +21,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import Principal
 from app.modules.requisitions import constants as c
 from app.modules.requisitions.constants import RunStatus
-from app.modules.requisitions.models import Requisition, RequisitionSnapshot, ScreeningRun
+from app.modules.requisitions.models import (
+    Requisition,
+    RequisitionSnapshot,
+    RequisitionSnapshotPayload,
+    ScreeningRun,
+)
 from app.modules.requisitions.schemas import RequisitionUpsert
 
 _REFRESH = {"populate_existing": True}
@@ -219,3 +226,69 @@ class ScreeningRunRepository:
         )
         result = await self._session.scalars(stmt, execution_options=_REFRESH)
         return result.one_or_none()
+
+
+# --- Snapshot payload store (BE-1.5, D-05) ----------------------------------------------
+
+
+class SnapshotIntegrityError(RuntimeError):
+    """A stored payload does not match its recorded hash, or the reference is unusable."""
+
+
+def canonical_json(payload: dict[str, Any]) -> bytes:
+    """Canonical JSON: sorted keys, compact separators, UTF-8, no NaN/Infinity (D-05)."""
+    if not isinstance(payload, dict):
+        raise TypeError("snapshot payloads must be JSON objects")
+    return json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+    ).encode("utf-8")
+
+
+def compute_payload_hash(payload: dict[str, Any]) -> str:
+    return c.PAYLOAD_HASH_PREFIX + hashlib.sha256(canonical_json(payload)).hexdigest()
+
+
+class SnapshotStore(Protocol):
+    """Where snapshot payloads live. Object storage can implement this later (D-05)."""
+
+    async def put(self, payload: dict[str, Any]) -> tuple[str, str]:
+        """Store ``payload``; return ``(payload_reference, payload_hash)``."""
+        ...
+
+    async def get(self, reference: str, expected_hash: str) -> dict[str, Any]:
+        """Return the payload after re-verifying its hash; raise on any mismatch."""
+        ...
+
+
+class DbSnapshotStore:
+    """``requisition_snapshot_payload`` table, written in the caller's transaction."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def put(self, payload: dict[str, Any]) -> tuple[str, str]:
+        canonical = canonical_json(payload)
+        payload_hash = c.PAYLOAD_HASH_PREFIX + hashlib.sha256(canonical).hexdigest()
+        row = RequisitionSnapshotPayload(payload=json.loads(canonical), payload_hash=payload_hash)
+        self._session.add(row)
+        await self._session.flush()
+        return f"{c.PAYLOAD_REFERENCE_PREFIX}{row.id}", payload_hash
+
+    async def get(self, reference: str, expected_hash: str) -> dict[str, Any]:
+        if not reference.startswith(c.PAYLOAD_REFERENCE_PREFIX):
+            raise SnapshotIntegrityError("unsupported payload reference")
+        try:
+            payload_id = uuid.UUID(reference.removeprefix(c.PAYLOAD_REFERENCE_PREFIX))
+        except ValueError:
+            raise SnapshotIntegrityError("malformed payload reference") from None
+        result = await self._session.scalars(
+            select(RequisitionSnapshotPayload).where(RequisitionSnapshotPayload.id == payload_id),
+            execution_options=_REFRESH,
+        )
+        row = result.one_or_none()
+        if row is None:
+            raise SnapshotIntegrityError("snapshot payload is missing")
+        actual = compute_payload_hash(row.payload)
+        if actual != expected_hash or actual != row.payload_hash:
+            raise SnapshotIntegrityError("snapshot payload hash mismatch")
+        return row.payload
