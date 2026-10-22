@@ -1,0 +1,9 @@
+{
+  "external_requisition_id": "REQ-CLOSED-1",
+  "status": "closed",
+  "business_unit": "bu-1",
+  "external_version": "7",
+  "last_modified_at": "2026-09-01T12:00:00+00:00",
+  "title": "Backend Engineer",
+  "description": "Build and maintain the services behind the customer portal."
+}

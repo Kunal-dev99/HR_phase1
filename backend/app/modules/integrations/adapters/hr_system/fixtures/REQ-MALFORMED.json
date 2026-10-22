@@ -1,0 +1,7 @@
+{
+  "external_requisition_id": "REQ-MALFORMED",
+  "status": null,
+  "business_unit": "bu-1",
+  "title": 12345,
+  "description": "Schema-invalid fixture: status is null and title is not a string."
+}

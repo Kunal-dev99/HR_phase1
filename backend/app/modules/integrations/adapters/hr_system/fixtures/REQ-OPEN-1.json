@@ -1,0 +1,19 @@
+{
+  "external_requisition_id": "REQ-OPEN-1",
+  "status": "open",
+  "business_unit": "bu-1",
+  "external_version": "3",
+  "last_modified_at": "2026-10-20T09:30:00+00:00",
+  "title": "Senior Data Engineer",
+  "description": "Design, build and operate the batch and streaming data pipelines that feed the analytics platform.",
+  "responsibilities": [
+    "Own the ingestion pipelines end to end",
+    "Review data models with analytics stakeholders"
+  ],
+  "required_skills": ["Python", "SQL", "Apache Spark"],
+  "preferred_skills": ["Kafka"],
+  "seniority": "senior",
+  "location": "Remote (EU)",
+  "employment_type": "full_time",
+  "department": "Data Platform"
+}

@@ -1,0 +1,8 @@
+{
+  "external_requisition_id": "REQ-OTHER-BU-1",
+  "status": "open",
+  "business_unit": "bu-other",
+  "external_version": "2",
+  "title": "Finance Controller",
+  "description": "Lead month-end close and the statutory reporting calendar."
+}
