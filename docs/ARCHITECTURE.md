@@ -32,6 +32,7 @@ shortlist back to the HR System — for recruiters and hiring teams.
 | Frontend | React + TypeScript on Next.js (App Router), in `frontend/`; local dev only for now | Agreed (D-20) |
 | Design system | Own minimal set: Tailwind tokens + in-repo components in `frontend/src/components/ui/`; no external bundle | Agreed (D-20) |
 | API types | Generated from FastAPI OpenAPI (`openapi-typescript`) | Agreed |
+| AI provider | Groq (default model `openai/gpt-oss-120b`) behind a provider-neutral model gateway in `integrations` (`adapters/ai_model/`: Groq + mock); key only from `GROQ_API_KEY` env / gitignored `backend/.env`; prompt, schema and model versions recorded per output; feature flag `FEATURE_ROLE_BRIEF` (default off) | Agreed (D-31); details Proposed (D-35…D-37, D-39) |
 | Deployment | Containers on organization-approved cloud | Open (spec §15.5) |
 | Sourcing helper | `Extension/` — Chrome extension exporting Sales Navigator list rows to CSV | Existing |
 
@@ -56,7 +57,7 @@ model §4.
 | Module | Tables | Endpoints |
 |---|---|---|
 | `requisitions` | `requisition`, `requisition_snapshot`, `screening_run` | `POST /screening-runs`, `GET /screening-runs/{run_id}` |
-| `role_briefs` | `role_brief_version` | `POST /screening-runs/{run_id}/approve-role-brief` |
+| `role_briefs` | `role_brief_version` | `GET /screening-runs/{run_id}/role-brief` (`screening_run:read`), `POST /screening-runs/{run_id}/approve-role-brief` (`role_brief:approve`); generation is an executor step after ingestion via the AI gateway (D-32, D-34; Phase 6 planned) |
 | `role_models` | `role_configuration_version` | `POST /screening-runs/{run_id}/approve-configuration` |
 | `applicants` (3A) | `candidate_source_record` (source = HR) | — (workflow step) |
 | `discovery` (3B) | `discovery_query`, `discovery_batch`, `discovery_result` | — (workflow step) |
@@ -66,7 +67,7 @@ model §4.
 | `evaluation` | `candidate_evaluation` | `GET /candidates/{candidate_id}/evaluation` |
 | `shortlists` | `shortlist`, `shortlist_entry` | `GET /screening-runs/{run_id}/shortlist`, `POST /screening-runs/{run_id}/retry-writeback` |
 | `audit` | `audit_event`, `workflow_events` | — (append-only) |
-| `integrations` | `integration_attempt` | — (HR System, Fusion Mind, discovery adapters) |
+| `integrations` | `integration_attempt` | — (HR System, AI model gateway (Groq, mock; D-39), Fusion Mind, discovery adapters) |
 
 ## Design constraints
 

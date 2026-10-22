@@ -1008,3 +1008,415 @@ Numbered from Q-17 so they do not collide with Q-1…Q-16.
 - **Q-21** Should every later backend phase also run `pytest` on a PostgreSQL copy, so the
   two dialects do not drift? The default is yes while `hr_phase1_mvpui_copy` exists. It
   becomes mandatory at the D-18 revisit before pilot.
+
+---
+
+## Feature: Role Brief (AI)
+
+- **Kickoff:** `docs/prompts/kickoffs/2026-10-22-role-brief.md`
+- **Plan status:** PROPOSED — awaiting approval. D-31 records the user's decisions
+  (Accepted). D-32…D-39 are "Proposed — awaiting approval", and the tasks below use their
+  defaults. If approval changes a default, I amend the affected tasks before the build.
+- **Plan author:** solution-architect, 2026-10-22
+- **Specs and decisions used:** System Design §5; Tech Arch §2 (provider-neutral model
+  gateway), §5.1 (runtime sequence, example output, design controls), §6.1, §6.2, §8, §9 (AI
+  governance, prompt-injection); Data Model §4.4, §7.1, §8. D-01…D-04, D-06, D-08, D-09,
+  D-11, D-12, D-13, D-18, D-20…D-26, D-28, D-29, D-30.
+- **Starting point:** `master` = `1f4406a` (verified by Read/Grep):
+  - `RunStatus` in `backend/app/modules/requisitions/constants.py` already defines
+    `awaiting_role_approval` and `role_configuration`. Runs stop at `role_brief_draft`.
+  - `screening_run.role_brief_version_id` exists (nullable `Uuid`, no FK) in
+    `requisitions/models.py`.
+  - `ScreeningRunRepository.transition` (conditional on `expected_status`) has no
+    `role_brief_version_id` argument yet. `PHASE_1_BY_STATUS` maps only
+    `created/ingesting_requisition/role_brief_draft/blocked`.
+  - `build_ingestion_handler` / `build_run_executor` in `requisitions/service.py` are wired
+    in `app/main.py` only when `FEATURE_SCREENING_RUNS=true`.
+  - The adapter pattern is `integrations/adapters/hr_system/{base.py, mock.py, fixtures/}`
+    plus `HRSystemService` in `integrations/service.py`, which writes one
+    `integration_attempt` per call and never stores bodies.
+  - `httpx` is a dev-only dependency in `backend/pyproject.toml`.
+  - Migrations end at `0002_requisitions`. `scripts/export_openapi.py` pins
+    `FEATURE_SCREENING_RUNS=true`, `HR_SYSTEM_ADAPTER=mock`.
+  - Frontend: `RunStatusView.tsx` stops polling at `role_brief_draft`/`blocked` (D-24).
+    `src/dev-auth/presets.ts` has four presets with no `role_brief:*` permission.
+- **Task ID scheme:** continues the global phase sequence (Phases 0–5 are used). This
+  feature is **Phase 6** (backend, BE-6.x) and **Phase 7** (frontend, FE-7.x).
+- **Testing level (D-18, user wants minimal testing):**
+  - Backend: `ruff check .`, `mypy app`, `pytest` on SQLite (D-26) and the Alembic round
+    trip `upgrade head → downgrade -1 → upgrade head`. New tests: five in total, all using
+    the mock AI provider. Tests never call Groq.
+  - Frontend: `npm run build`, `npm run lint`, `npm run typecheck`. No test runner.
+  - One manual real-Groq smoke (BE-6.8, only if `GROQ_API_KEY` is set) and one browser
+    walkthrough (Phase 7 Done-when).
+  - No PostgreSQL runs (deferred, D-30/Q-21). Code stays dialect-neutral (D-28):
+    `JSONType`, `UTCDateTime`, app-side `uuid4`/`utc_now` defaults, no dialect imports
+    under `app/modules/`.
+
+### Standing-rule compliance (applies to every task below)
+
+- **D-01:** one new table (`role_brief_version`) in a new migration `0003_role_briefs`. Every
+  other change is additive: new enum members, a new optional repository argument, a new
+  nullable response field, new routes, new settings, new fixtures, new UI components. No
+  existing route, column, page or test is removed or changed in meaning.
+- **D-02:** `0003_role_briefs` has a tested downgrade (Alembic CLI round trip). New
+  behaviour sits behind `FEATURE_ROLE_BRIEF` (backend, default `false`) and
+  `NEXT_PUBLIC_FEATURE_ROLE_BRIEF` (frontend, default `false`). With both off, runs stop at
+  `role_brief_draft` exactly as today. Briefs are never deleted. A failed generation blocks
+  the run (a status, not a deletion), and approval changes status, never content.
+- **D-03:** worktrees `/home/user/HR_phase1-worktrees/role-brief-phase6` and
+  `…/role-brief-phase7`. SQLite copies under each worktree's `backend/`:
+  `hr_phase1_rolebrief_copy.db` (manual) and `hr_phase1_sqlite_test.db` (pytest). The D-29
+  stem guard refuses anything else.
+- **D-04:** `GET /screening-runs/{run_id}/role-brief` needs `screening_run:read`.
+  `POST /screening-runs/{run_id}/approve-role-brief` needs `role_brief:approve` (D-34). Both
+  load the run through `ScreeningRunRepository.get_for_principal` (D-09 scope from the
+  principal), so a missing or out-of-scope run returns 404. `create_app`'s route check
+  (D-15) covers the new routes.
+
+### Status flow added by this feature (Data Model §7.1 subset)
+
+```
+… ingesting_requisition ──eligible──▶ role_brief_draft ──AI ok + schema + citations valid──▶ awaiting_role_approval ──approve (role_brief:approve)──▶ role_configuration (stops here)
+                                             │
+                                             ├──provider down / timeout / auth / rate limit──▶ blocked (role_brief_ai_unavailable)
+                                             └──bad JSON / schema / unverified citation─────▶ blocked (role_brief_output_invalid)
+```
+
+---
+
+### Phase 6 — Backend: role_briefs module, AI gateway (Groq + mock), approve endpoint
+
+Goal: with `FEATURE_ROLE_BRIEF=true`, a run that reaches `role_brief_draft` gets an
+AI-generated, schema-validated and citation-checked `role_brief_version` and moves to
+`awaiting_role_approval`. A permitted user can read it and approve it, which moves the run
+to `role_configuration`. AI failure blocks the run with a reason and stores no brief.
+**Precondition:** D-32…D-39 approved (or amended).
+
+- [ ] BE-6.1 Isolation setup (D-03). Create worktree
+  `/home/user/HR_phase1-worktrees/role-brief-phase6` on branch `feature/role-brief-phase6`
+  from `master` (`1f4406a`). In its `backend/.env` set
+  `DATABASE_URL=sqlite+aiosqlite:///./hr_phase1_rolebrief_copy.db` and run `alembic upgrade
+  head`. `backend/.env` is gitignored, and `GROQ_API_KEY` is only ever put there or in the
+  shell environment (D-31).
+  Done-when: the report shows `git worktree list` with the Phase 6 path and `alembic current` on `hr_phase1_rolebrief_copy.db` showing `0002_requisitions (head)`.
+- [ ] BE-6.2 Settings, dependency and env example (D-31, D-32). In
+  `backend/app/core/settings.py` add:
+  - `FEATURE_ROLE_BRIEF: bool = False`;
+  - `AI_PROVIDER: str | None = None` (`mock` | `groq`);
+  - `AI_MODEL: str = "openai/gpt-oss-120b"` (D-37);
+  - `AI_TIMEOUT_SECONDS: float` (default 60, `gt=0`, `le=300`);
+  - `GROQ_API_KEY: SecretStr | None = None` (pydantic `SecretStr`, so it never appears in
+    `repr`, logs or errors);
+  - `GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"`.
+
+  `unsafe_configuration_reasons` adds these refusals:
+  - `FEATURE_ROLE_BRIEF=true` without `FEATURE_SCREENING_RUNS=true`, or without
+    `AI_PROVIDER`;
+  - `AI_PROVIDER=groq` with an empty `GROQ_API_KEY`;
+  - `AI_PROVIDER=mock` when `ENVIRONMENT=production`.
+
+  Move `httpx` from the dev extra to `dependencies` in `backend/pyproject.toml` (the Groq
+  adapter uses it; there is no Groq SDK). Regenerate both lock files (D-17). In
+  `backend/.env.example`, add commented lines with names only: `# FEATURE_ROLE_BRIEF=false`,
+  `# AI_PROVIDER=`, `# AI_MODEL=openai/gpt-oss-120b`, `# AI_TIMEOUT_SECONDS=60` and
+  `# GROQ_API_KEY=` (no value, with the note "set in backend/.env or the shell; never
+  commit").
+  Done-when: new test `test_settings.py::test_role_brief_requires_ai_provider_and_key` passes (flag without provider, and `groq` without key, both raise `UnsafeConfigurationError`), and Grep finds `httpx==` in `backend/requirements.lock` and `GROQ_API_KEY=` with no value in `backend/.env.example`.
+- [ ] BE-6.3 AI model gateway in `integrations` (D-31, D-35, D-39). Add
+  `backend/app/modules/integrations/adapters/ai_model/`:
+  - `base.py`: an `AIModelAdapter` protocol (`provider_key`,
+    `async complete_json(request: AIRequest) -> AIResponse`); frozen dataclasses
+    `AIRequest` (`system_prompt`, `user_content`, `json_schema`, `model`,
+    `max_output_tokens`, `routing_key` — non-sensitive metadata used only by the mock and
+    never sent to a provider) and `AIResponse` (`content` text, `model` as reported by the
+    provider, `http_status`); typed errors `AIUnavailable` (error codes `timeout`,
+    `unavailable`, `auth_failed`, `rate_limited`) and `AIOutputInvalid` (`invalid_json`,
+    `refused`).
+  - `groq.py`: `GroqAdapter` POSTs `{GROQ_BASE_URL}/chat/completions` with httpx,
+    `Authorization: Bearer <key>` taken from `SecretStr.get_secret_value()` only at call
+    time. It sends the two messages, `temperature` 0, a JSON-schema `response_format` and
+    no tools. It is a single attempt with no retries (D-06). It maps HTTP 401/403, 429, 5xx
+    and timeouts to `AIUnavailable` codes. It never logs or puts into exception messages
+    the key, headers, prompt or response bodies.
+  - `mock.py` plus `fixtures/`: `MockAIModelAdapter` returns
+    `fixtures/role_brief_<routing_key>.json` as the content. `REQ-OPEN-1` gets a valid brief
+    whose quotes match that HR fixture. `REQ-AI-INVALID-1` gets a brief with a quote that is
+    not in its source. `REQ-AI-UNAVAILABLE-1` raises `AIUnavailable("unavailable")`. Any
+    other key raises `AIUnavailable`. The ID is a dict key only, never a path (as in the HR
+    mock).
+  - Add two HR fixtures, `REQ-AI-INVALID-1.json` and `REQ-AI-UNAVAILABLE-1.json` (open,
+    complete, `bu-1`), under `adapters/hr_system/fixtures/`.
+  - `integrations/service.py`: `build_ai_model_adapter(settings)` (unset or unknown
+    provider fails closed; `mock` refused in production), and
+    `AIGatewayService.generate_structured(request, output_model, *, screening_run_id,
+    correlation_id, operation)`. It applies `asyncio.timeout(AI_TIMEOUT_SECONDS)`, parses
+    JSON, validates it with the given pydantic model (an error lists field locations only),
+    and writes one `integration_attempt` (`integration_name="ai_model"`, operation
+    `role_brief.generate`, outcome, `error_code`, `http_status`; no bodies) in the caller's
+    unit of work. Constants go in `integrations/constants.py`.
+  Done-when: `mypy app` passes and BE-6.5's `test_generation_creates_brief_and_awaits_approval` asserts exactly one `integration_attempt` with `integration_name == "ai_model"` and outcome `success` for the run.
+- [ ] BE-6.4 Migration `0003_role_briefs` and model (D-37, D-28). Add
+  `backend/alembic/versions/0003_role_briefs.py` (down_revision `0002_requisitions`),
+  dialect-aware like 0002: `JSON` on SQLite, JSONB on PostgreSQL, no server-side UUID or
+  clock defaults on SQLite. It creates `role_brief_version` with the Data Model §4.4
+  columns:
+  - `id`, `requisition_id` (FK `requisition.id`), `version_number`, `status`,
+    `structured_role_data`, `explicit_source_facts`, `ai_inferences`, `ambiguities`,
+    `source_snapshot_id` (FK `requisition_snapshot.id`), `schema_version`, `created_by`,
+    `approved_by`, `approved_at`, `created_at`;
+  - plus the D-37 additions: `screening_run_id` (FK `screening_run.id`, not null),
+    `source_payload_hash`, `prompt_version`, `model_provider`, `model_name`.
+
+  It adds unique `(requisition_id, version_number)` and an index on `screening_run_id`.
+  There is no FK on `screening_run.role_brief_version_id` (D-37). `downgrade()` drops only
+  the index and the table. Add `RoleBriefVersion` in `role_briefs/models.py`, using
+  `JSONType`, `UTCDateTime`, `default=uuid.uuid4` and `default=utc_now`.
+  Done-when: on `hr_phase1_rolebrief_copy.db`, `alembic upgrade head`, `alembic downgrade -1`, `alembic upgrade head` all exit 0 and `alembic current` shows `0003_role_briefs (head)` (output in the report).
+- [ ] BE-6.5 `role_briefs` module and generation service (D-32, D-33, D-35, D-36, D-37). The
+  standard seven files go in `backend/app/modules/role_briefs/`.
+  - `constants.py`: `RoleBriefStatus` (`draft`, `awaiting_review`, `approved`,
+    `superseded`), `ROLE_BRIEF_SCHEMA_VERSION="1"`, `ROLE_BRIEF_PROMPT_VERSION="role_brief.v1"`,
+    the fixed system prompt text (D-35), `PERMISSION_ROLE_BRIEF_APPROVE="role_brief:approve"`,
+    `GENERATOR_ACTOR_ID="role_briefs.generator"`, and the column limits.
+  - `schemas.py`: `RoleBriefOutputV1` (extra forbidden) with these fields:
+    - `role_title`, `role_purpose`, `responsibilities`, `required_capabilities`,
+      `preferred_capabilities`, `seniority`, `location_constraints`,
+      `employment_constraints`. Each is a `BriefItem{text, basis: "source_fact" |
+      "ai_inference", source_refs: [{path, quote}]}`.
+    - `explicit_source_facts` `[{statement, source_refs}]`.
+    - `ai_inferences` `[{statement, rationale, source_refs}]`.
+    - `ambiguities` `[{topic, description, severity: "material" | "minor",
+      suggested_question}]`.
+
+    It also holds `RoleBriefResponse` and `ApproveRoleBriefRequest`. The JSON schema sent to
+    the provider is `RoleBriefOutputV1.model_json_schema()`.
+  - `repository.py`: `RoleBriefRepository` with `add`, `get`, `next_version_number(
+    requisition_id)`, and `approve(id, approved_by)`. `approve` is a conditional `UPDATE …
+    WHERE status='awaiting_review' RETURNING` and is the only update path (immutability,
+    D-37).
+  - `service.py`, `RoleBriefService.generate(run_id)`:
+    1. Load the run with `get_for_workflow`. It must be in `role_brief_draft` with no
+       `role_brief_version_id`, otherwise it is a no-op.
+    2. Load the payload with `SnapshotService.load_payload` (hash-verified).
+    3. Call `AIGatewayService` outside any open transaction (D-32), with `routing_key =
+       external_requisition_id`.
+    4. Run the deterministic checks: D-36 citation verification, and the rule that every
+       `required_capabilities` and `responsibilities` item is a `source_fact` with at least
+       one verified ref ("do not invent mandatory requirements", Tech Arch §5.1).
+    5. In one unit of work, insert the version (`awaiting_review`, `created_by =
+       "ai_model:<provider>/<model>"`) and run the conditional `transition(role_brief_draft
+       → awaiting_role_approval, role_brief_version_id=…)`. The audit events
+       `RoleBriefCreated` and `RunStatusChanged` (actor `system`/`role_briefs.generator`,
+       the run's correlation_id, details limited to IDs, versions, model name and item
+       counts) go in the same unit (D-12).
+
+    On `AIUnavailable` or `AIOutputInvalid`, the run is blocked per D-33 in one unit of
+    work with its audit event, and no version row is stored.
+  - Additive changes in `requisitions`:
+    - `CompletionReason` gains `ROLE_BRIEF_AI_UNAVAILABLE` and `ROLE_BRIEF_OUTPUT_INVALID`.
+    - `ScreeningRunRepository.transition` gains an optional `role_brief_version_id`.
+    - `PHASE_1_BY_STATUS` gains the D-38 entries.
+    - `ScreeningRunStatusResponse` gains nullable `role_brief_version_id`.
+    - `events.py` in `role_briefs` names `RoleBriefCreated` and `RoleBriefApproved`.
+  Done-when: new tests `tests/test_role_briefs.py::test_generation_creates_brief_and_awaits_approval` (mock provider, `REQ-OPEN-1`: run is `awaiting_role_approval`, `role_brief_version_id` set, version `awaiting_review` with `model_name`, `prompt_version`, `schema_version`, `source_payload_hash` recorded, `RoleBriefCreated` audited) and `tests/test_role_briefs.py::test_invalid_ai_output_blocks_run` (`REQ-AI-INVALID-1`: run `blocked/role_brief_output_invalid` with `status_details.error_code == "citation_unverified"`, no `role_brief_version` row) pass on SQLite.
+- [ ] BE-6.6 Executor wiring and HTTP routes (D-32, D-34, D-38).
+  - `RoleBriefService` gets a builder `build_role_brief_handler(settings, gateway_adapter,
+    session_scope)` in `role_briefs/service.py`. In `app/main.py`, when
+    `FEATURE_ROLE_BRIEF=true`, the run handler becomes "ingest, then (new session)
+    generate if the run is in `role_brief_draft`" inside the same `RunExecutor` dispatch.
+    `requisitions/service.py` is unchanged apart from the BE-6.5 additions.
+  - Add `role_briefs/router.py`, mounted under `/api/v1` only when
+    `FEATURE_ROLE_BRIEF=true`:
+    - `GET /screening-runs/{run_id}/role-brief`. Permission `screening_run:read`. Returns
+      `RoleBriefResponse`: the brief sections, `version_number`, `status`, `schema_version`,
+      `prompt_version`, `model_provider`, `model_name`, `source_snapshot_id`,
+      `source_payload_hash`, `created_at`, `approved_by` and `approved_at`. It never returns
+      the raw snapshot payload. Returns 404 if the run is missing, out of scope or has no
+      brief.
+    - `POST /screening-runs/{run_id}/approve-role-brief`. Permission `role_brief:approve`.
+      Body `{"role_brief_version_id": uuid}`, extra fields forbidden. In one unit of work it
+      runs `RoleBriefRepository.approve` (`approved_by` = principal ID, `approved_at` =
+      `utc_now()`), the conditional run transition `awaiting_role_approval →
+      role_configuration`, and the audit events `RoleBriefApproved` (actor `user`, details
+      include `material_ambiguities` count, D-38) and `RunStatusChanged`. Returns 200
+      `RoleBriefResponse`. Returns 409 if the run is not in `awaiting_role_approval` or the
+      ID is not the run's current version, and 404 if the run is missing or out of scope.
+    - The router calls only `RoleBriefService`. The service re-checks the permission as
+      defence in depth (as `ScreeningRunService` does).
+  Done-when: new tests `tests/test_api_role_briefs.py::test_brief_generated_and_approved_end_to_end` (`RUN_EXECUTOR=inline`, `AI_PROVIDER=mock`: POST `REQ-OPEN-1` → GET status `awaiting_role_approval` with phase_1 `awaiting_approval` → GET role-brief 200 → approve 200 → GET status `role_configuration` with phase_1 `completed`) and `tests/test_api_role_briefs.py::test_approve_without_permission_403` pass.
+- [ ] BE-6.7 OpenAPI re-export (D-23). In `backend/scripts/export_openapi.py`, add
+  `FEATURE_ROLE_BRIEF=true` and `AI_PROVIDER=mock` to `EXPORT_ENVIRONMENT` and to the
+  `Settings(...)` call. No key is needed or read. Run it and commit `backend/openapi.json`.
+  Done-when: Grep shows `/api/v1/screening-runs/{run_id}/role-brief` and `/api/v1/screening-runs/{run_id}/approve-role-brief` under `paths` in `backend/openapi.json`, and `role_brief_version_id` in the `ScreeningRunStatusResponse` schema.
+- [ ] BE-6.8 Manual real-Groq smoke (D-31). Run only if `GROQ_API_KEY` is set in the
+  environment or in the worktree's gitignored `backend/.env`. Start
+  `scripts/start-backend.sh` from the worktree with `FEATURE_SCREENING_RUNS=true`,
+  `FEATURE_ROLE_BRIEF=true`, `AUTH_MODE=dev_header`, `HR_SYSTEM_ADAPTER=mock`,
+  `AI_PROVIDER=groq`, and the default `AI_MODEL`. POST `REQ-OPEN-1`, poll GET, then GET
+  role-brief. If the key is not set, the report says "not run: no GROQ_API_KEY", the task
+  stays unticked and is listed as deferred, and it does not block Phase 7.
+  Done-when: the report shows the run reaching `awaiting_role_approval` (or, if the model's output fails validation, `blocked/role_brief_output_invalid` with its `error_code`, reported as a finding), the brief's `model_name`, and `grep -c` of the key value over the backend console log and `git diff`/`git status` output returning 0.
+
+- [ ] **Phase 6 Done-when:** in the Phase 6 worktree on SQLite
+  (`DATABASE_URL=sqlite+aiosqlite:///./hr_phase1_sqlite_test.db` for pytest), the engineer
+  reports real output: `ruff check .` and `mypy app` clean; `pytest -ra` passes, with only
+  the existing `pg_only` tests skipped; and the BE-6.4 round trip. BE-6.8 has either been
+  run or been recorded as "not run: no key". `git status` shows no `.env` or `.db` file
+  tracked.
+
+**Reversibility:**
+- `FEATURE_ROLE_BRIEF=false` (the default) mounts no role-brief routes, builds no AI adapter
+  and does not chain generation. Runs stop at `role_brief_draft` exactly as before. The only
+  visible API change is the always-present, nullable `role_brief_version_id` field on the
+  run status response (additive).
+- `alembic downgrade 0002_requisitions` drops `role_brief_version`. What remains afterwards:
+  - runs already in `awaiting_role_approval` or `role_configuration` keep those statuses;
+  - their `role_brief_version_id` values dangle, since there is no FK (D-37);
+  - `integration_attempt` and audit rows stay (append-only).
+
+  Once real approved briefs exist, downgrading `0003` needs a new decision, because it would
+  destroy approval records.
+- Reverting the branch removes the module. The added HR fixtures and `.env.example` lines
+  are harmless.
+
+**Deferred from Phase 6:**
+- Retry endpoint and re-generation of a brief, plus editing a brief (kickoff out of scope;
+  D-33: retry = start a new run).
+- Startup recovery of runs left in `role_brief_draft` by a restart mid-call (Q-24).
+- Clarification-question workflow with HR and the `awaiting_role_review` state (Q-27).
+- Re-ingestion and re-generation when the source version changes (Tech Arch §5.1).
+- Multiple AI providers, provider fallback and model routing (kickoff out of scope; the
+  gateway is the seam).
+- Retries with backoff for AI calls (D-06 single attempt).
+- Tests not written under D-18: Groq adapter HTTP mapping (httpx `MockTransport`), the
+  `role_brief_ai_unavailable` path, 409 on double approve, out-of-scope 404 on the new
+  routes, a key-never-logged test, and the `FEATURE_ROLE_BRIEF=false` → 404 route test.
+- FK `screening_run.role_brief_version_id → role_brief_version.id` (D-37).
+- PostgreSQL run of the suite and of the round trip (D-30/Q-21, deferred by the user).
+- AI evaluation for quality, disparate errors and job-related validity (Tech Arch §9,
+  §13) before pilot.
+
+---
+
+### Phase 7 — Frontend: role brief view and approve on the run status page
+
+Goal: on `/screening-runs/[runId]` a user sees the brief, with facts, AI inferences and
+ambiguities clearly separated and each traceable to a snapshot path and quote. A user with
+`role_brief:approve` can approve it.
+**Precondition:** Phase 6 verified, ticked and merged to `master`.
+
+- [ ] FE-7.1 Isolation setup (D-03). Create worktree
+  `/home/user/HR_phase1-worktrees/role-brief-phase7` on branch `feature/role-brief-phase7`
+  from `master` with Phase 6 merged. Migrate `backend/hr_phase1_rolebrief_copy.db` in the
+  worktree to head.
+  Done-when: the report shows `git worktree list` with the Phase 7 path and `alembic current` showing `0003_role_briefs (head)`.
+- [ ] FE-7.2 API functions and messages. Run `npm run gen:api`. Add
+  `frontend/src/api/role-briefs.ts` with `getRoleBrief(runId)` and
+  `approveRoleBrief(runId, roleBriefVersionId)`, typed only from `src/api/schema.d.ts`. In
+  `src/api/messages.ts` add:
+  - labels for `role_brief_ai_unavailable` ("The AI service was unavailable. Start a new
+    run to try again.") and `role_brief_output_invalid` ("The AI output failed validation;
+    no brief was stored.");
+  - a 403 message on approve naming `role_brief:approve`;
+  - a 409 message on approve ("This brief can no longer be approved. Refresh.");
+  - a 404 message on the brief GET ("No role brief yet.").
+  Done-when: `npm run typecheck` passes and Grep finds no hand-written `(type|interface) .*RoleBrief` under `frontend/src` outside `src/api/schema.d.ts`.
+- [ ] FE-7.3 UI flag and dev preset (D-34, D-38, D-21). Add `isRoleBriefEnabled()`
+  (`NEXT_PUBLIC_FEATURE_ROLE_BRIEF`, default `false`) to `frontend/src/features.ts`, and
+  `NEXT_PUBLIC_FEATURE_ROLE_BRIEF=false` to `frontend/.env.example`. In
+  `frontend/src/dev-auth/presets.ts` add the preset "Approver bu-1" (`dev-approver-bu-1`,
+  permissions `screening_run:read, role_brief:approve`, `bu-1`). The existing four presets
+  are unchanged.
+  Done-when: `npm run build`, `npm run lint` and `npm run typecheck` pass and Grep finds `role_brief:approve` in `frontend/src/dev-auth/presets.ts`.
+- [ ] FE-7.4 Role brief panel and approve on the run status page (D-38, D-20).
+  - **Polling.** In `RunStatusView.tsx`, when `isRoleBriefEnabled()`, the stopping
+    statuses become `awaiting_role_approval`, `role_configuration` and `blocked`, and
+    `role_brief_draft` keeps polling. When the flag is off, D-24 is unchanged. Status tones:
+    `awaiting_role_approval` warning, `role_configuration` success.
+  - **Panel.** When the run has `role_brief_version_id`, a local component
+    `frontend/src/app/screening-runs/[runId]/RoleBriefPanel.tsx` (page-local, not a new
+    shared `ui/` component) fetches the brief once and renders it with the existing `Card`,
+    `KeyValueList`, `StatusBadge`, `Alert` and `Button`:
+    - "Role" (title, purpose, seniority, constraints);
+    - "From the requisition (facts)": each item with its `path` and quoted text;
+    - "AI inferences": labelled "AI suggestion", with rationale and refs;
+    - "Ambiguities": severity badge and suggested question;
+    - "Provenance": version, status, model, prompt and schema version, snapshot ID and
+      hash, approved by and at.
+  - **Approve.** An "Approve role brief" button shows only while the run is in
+    `awaiting_role_approval`. It is disabled while submitting and, if material ambiguities
+    exist, labelled "Approve (accepts listed ambiguities)". It POSTs with the shown version
+    ID, then refreshes the run and the brief. Errors appear in an `Alert` using the FE-7.2
+    messages.
+  - All text is rendered as escaped data.
+  Done-when: `npm run build`, `npm run lint` and `npm run typecheck` pass and Grep finds no `dangerouslySetInnerHTML` under `frontend/src`.
+
+- [ ] **Phase 7 Done-when:** in the Phase 7 worktree, `npm run build`, `npm run lint` and
+  `npm run typecheck` pass, and backend `ruff check .`, `mypy app` and `pytest` pass. One
+  browser walkthrough (screenshots in the report) is run with the backend from
+  `scripts/start-backend.sh` (`FEATURE_SCREENING_RUNS=true`, `FEATURE_ROLE_BRIEF=true`,
+  `AUTH_MODE=dev_header`, `HR_SYSTEM_ADAPTER=mock`, `AI_PROVIDER=mock`, DB
+  `hr_phase1_rolebrief_copy.db`) and the frontend from `scripts/start-frontend.sh`
+  (`NEXT_PUBLIC_DEV_AUTH=true`, `NEXT_PUBLIC_FEATURE_SCREENING_RUNS=true`,
+  `NEXT_PUBLIC_FEATURE_ROLE_BRIEF=true`). The walkthrough shows:
+  1. "Recruiter bu-1" starts `REQ-OPEN-1`. The page reaches `awaiting_role_approval` and
+     phase_1 `awaiting_approval`, and shows the brief with facts (path + quote), AI
+     inferences and ambiguities in separate sections.
+  2. "Recruiter bu-1" clicks Approve and sees the `role_brief:approve` 403 message.
+  3. "Approver bu-1" clicks Approve. The page shows `role_configuration`, phase_1
+     `completed`, and approved by/at.
+  4. A `REQ-AI-INVALID-1` run shows `blocked` with the output-invalid label and no brief.
+
+**Reversibility:** `NEXT_PUBLIC_FEATURE_ROLE_BRIEF=false` (the default) restores today's
+page exactly: polling stops at `role_brief_draft` and no panel or approve button is shown.
+There is no migration. Reverting the branch removes the panel, the API functions and the
+preset. Briefs and approvals made through the UI stay in the copy DB and are never deleted.
+
+**Deferred from Phase 7:** brief editing and re-generation UI; a view of the raw snapshot
+next to the citations (the quotes are shown instead, and the raw payload stays unexposed per
+D-11); a separate role-brief page or list; frontend tests (D-18); accessibility and design
+pass.
+
+### Feature-level deferred list (Role Brief)
+
+| Item | Reason |
+|---|---|
+| Editing, re-generating or retrying a brief | Kickoff out of scope. D-33: retry = start a new run (the snapshot is reused by hash). |
+| Clarification workflow with HR, `awaiting_role_review` | Kickoff out of scope. Ambiguities are shown and accepted on approval (D-38, Q-27). |
+| Phase 2 role configuration | Kickoff out of scope. Runs stop at `role_configuration`. |
+| Re-ingestion on source version change | Kickoff out of scope (Tech Arch §5.1 design control). |
+| Multiple AI providers, fallback, routing | Kickoff out of scope. The gateway (D-39) is the seam. |
+| Secret manager for `GROQ_API_KEY` | Laptop demo (D-31). Tech Arch §9 secret manager before pilot. |
+| Recovery of runs stuck in `role_brief_draft` | Q-24. |
+| PostgreSQL verification | Deferred by the user (D-30/Q-21). Code stays dialect-neutral (D-28). |
+| AI quality evaluation and bias checks | Tech Arch §9/§13. Required before pilot, not for the demo. |
+| Trimmed tests (see Phase 6 deferred) | D-18. Restore at the pre-pilot revisit. |
+
+### Open questions for approval (Role Brief)
+
+Numbered from Q-22 so they do not collide with Q-1…Q-21.
+
+- **Q-22** Approve or amend D-32…D-39 (defaults are listed in `docs/DECISIONS.md`).
+- **Q-23** Data leaving the laptop: requisition text is sent to Groq, a third-party cloud
+  API (Tech Arch §15 residency and retention are open). Is it acceptable for the demo to use
+  only the synthetic mock HR fixtures with Groq? The default is yes: mock HR fixtures only,
+  with no real requisition data.
+- **Q-24** Runs interrupted mid-generation (backend restart) stay in `role_brief_draft`, and
+  the UI shows "Still running — use Refresh". Should startup recovery block them as
+  `role_brief_ai_unavailable` (`error_code: interrupted`) after a threshold? The default is
+  no for the demo (deferred). It is about one recovery query plus an audit event.
+- **Q-25** Citation strictness (D-36): one unverified quote rejects the whole brief. The
+  alternative is to keep the brief and move the unverified item into `ambiguities`. The
+  default is to reject (fail closed). If the Groq smoke shows frequent rejections, revisit
+  this.
+- **Q-26** Separation of duties: may the user who started the run approve its brief? The
+  default is yes (only `role_brief:approve` is checked). The alternative is to refuse with
+  409/403 when `approved_by == started_by`.
+- **Q-27** Tech Arch §5.1 step 8 names `awaiting_role_review` for material ambiguity, but
+  the Data Model §7.1 and Tech Arch §8.1 state lists do not include it. The default is to
+  always go to `awaiting_role_approval`, show material ambiguities, and treat approval as
+  explicitly accepting them (System Design §5: "resolved or explicitly accepted"). Confirm.
+- **Q-28** Model: `openai/gpt-oss-120b` with temperature 0 and JSON-schema output (D-37).
+  Is a smaller or faster Groq model wanted for the demo? Should a configured fallback model
+  exist? The default is no fallback; change `AI_MODEL` to switch.

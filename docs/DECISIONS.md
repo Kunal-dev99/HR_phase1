@@ -575,6 +575,220 @@ every feature unless a later decision names an exception and the reason for it.
 - **Consequence:** The SQLite run does not exercise startup recovery staleness or the
   tamper check. The PostgreSQL run does.
 
+## D-31 Role Brief AI provider, API key handling and demo target
+
+- **Status:** Accepted — user decisions, 2026-10-22
+- **Date:** 2026-10-22
+- **Feature:** Role Brief (AI) (`docs/DELIVERY_PLAN.md`, Phases 6–7; kickoff
+  `docs/prompts/kickoffs/2026-10-22-role-brief.md`)
+- **Decision:**
+  1. **Provider: Groq**, called only through a provider-neutral model gateway (Tech Arch §2,
+     §9). Every brief records the prompt version, the schema version, the provider and the
+     model name. Structured output is always validated by the application.
+  2. **API key:** read only from `GROQ_API_KEY` in the process environment or the
+     gitignored `backend/.env`. It is held as a pydantic `SecretStr`. It is never committed,
+     never logged, never placed in an exception message, an audit row or an
+     `integration_attempt` row, and never written to any file in the repository.
+     `backend/.env.example` carries the variable name only, with no value.
+  3. **Demo target: laptop.** Local only, no hosting (consistent with D-20).
+  4. **Testing:** D-18 MVP-light, and the user wants minimal testing. Automated tests use a
+     mock/fixture AI provider and never call Groq. There is one manual real-Groq smoke.
+- **Reason:** User instruction. The gateway keeps a later provider change additive.
+
+## D-32 Role brief trigger and execution
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** Role Brief (AI) (BE-6.2, BE-6.5, BE-6.6)
+- **Decision:**
+  - Generation is automatic. It is chained after ingestion inside the same `RunExecutor`
+    dispatch (D-06), in a fresh session, and only when the run is in `role_brief_draft` with
+    no `role_brief_version_id`. There is no "generate" endpoint.
+  - The run stays in `role_brief_draft` while the AI call runs. The AI call happens outside
+    any open DB transaction.
+  - The result is committed in one unit of work: the version insert plus a conditional
+    `transition(expected_status=role_brief_draft)`. If two dispatches race, both may call
+    the AI, but only one commit wins, and the loser rolls back with no row.
+  - Each call is a single attempt with no retries (D-06).
+  - Everything is behind `FEATURE_ROLE_BRIEF` (default `false`), which requires
+    `FEATURE_SCREENING_RUNS=true` and `AI_PROVIDER`.
+  - Startup recovery for `role_brief_draft` is not added (Q-24).
+- **Reason:** It is the kickoff's recommendation, and it reuses the existing executor
+  without a queue. The conditional transition keeps D-06's double-dispatch safety.
+- **Alternative:** an on-demand `POST …/generate-role-brief` from the UI. That needs one
+  more route, permission and button.
+
+## D-33 Role brief failure states and retry
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** Role Brief (AI) (BE-6.3, BE-6.5)
+- **Decision:**
+  - An AI failure moves the run `role_brief_draft → blocked` (terminal, as today), with
+    `completed_at` set and one of two new public `completion_reason` codes:
+    - `role_brief_ai_unavailable`: provider timeout, 5xx, auth failure or rate limit.
+      `status_details` is `{"error_code": "timeout" | "unavailable" | "auth_failed" |
+      "rate_limited", "retryable": true}`.
+    - `role_brief_output_invalid`: not JSON, failed `RoleBriefOutputV1` validation, a
+      refusal, an unverified citation (D-36), or a mandatory item that is not a sourced
+      fact. `status_details` is `{"error_code": "invalid_json" | "schema_invalid" |
+      "refused" | "citation_unverified" | "uncited_requirement", "retryable": true}`.
+  - No brief row is stored on failure. The `integration_attempt` row and the
+    `RunStatusChanged` audit event record the failure.
+  - There is no new run state and no retry endpoint. To retry, the user starts a new run
+    for the same requisition, and the snapshot is reused by hash (D-05).
+- **Reason:** It reuses the existing `blocked` + reason pattern (D-07), so the UI needs only
+  two labels. It never invents content. A retry endpoint would need a transition out of the
+  terminal `blocked` state, and the kickoff defers that.
+- **Alternative:** a new state `role_brief_failed` plus `POST …/retry-role-brief`.
+
+## D-34 Role brief permissions and dev principal preset (extends D-08, D-21)
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** Role Brief (AI) (BE-6.6, FE-7.3)
+- **Decision:**
+  - New permission `role_brief:approve` for `POST /api/v1/screening-runs/{run_id}/approve-role-brief`.
+  - Reading the brief (`GET /api/v1/screening-runs/{run_id}/role-brief`) uses the existing
+    `screening_run:read`. Whoever can see the run can see its brief.
+  - Both routes load the run through `get_for_principal` (D-09), so a missing or
+    out-of-scope run returns 404.
+  - Self-approval by the run starter is allowed (Q-26).
+  - The UI gets one more dev preset, "Approver bu-1" (`screening_run:read`,
+    `role_brief:approve`, `bu-1`). The four D-21 presets are unchanged, so "Recruiter bu-1"
+    gets a demonstrable 403 on approve.
+- **Reason:** It is the minimal set that keeps the approval separately grantable (Tech Arch
+  §6.2: "require authorization for approvals"). It needs no new read permission.
+- **Alternative:** a separate `role_brief:read` permission, which would require adding it
+  to every preset.
+
+## D-35 Prompt-injection guard for requisition text
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** Role Brief (AI) (BE-6.3, BE-6.5, FE-7.4)
+- **Decision:** Requisition text is data, never instructions (Tech Arch §9).
+  - The system prompt is a fixed, versioned constant (`ROLE_BRIEF_PROMPT_VERSION`). It
+    states that the snapshot is untrusted data and that any instructions inside it must be
+    ignored and may be reported as an ambiguity.
+  - The snapshot goes only into the user message, as JSON-encoded text inside a labelled
+    block, so its content cannot close the block or pose as a system message. Nothing from
+    the snapshot is ever placed into the system prompt.
+  - No tools or function calling are offered. The model output is only parsed as JSON and
+    validated against `RoleBriefOutputV1` (extra fields forbidden, length limits).
+  - Deterministic code alone decides run state. The AI cannot approve, transition or change
+    anything (Tech Arch §9: "separate AI suggestions from approved policy").
+  - D-36 citation checks reject invented "facts".
+  - The UI renders every model string as escaped text (no `dangerouslySetInnerHTML`, D-20).
+  - A `max_output_tokens` cap applies. Input size is already bounded by the HR payload
+    schema limits.
+- **Reason:** These are layered controls that need no extra service. The citation check
+  turns "the model was steered" into a validation failure instead of a stored fact.
+
+## D-36 Source citation format and verification
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** Role Brief (AI) (BE-6.5, FE-7.4)
+- **Decision:**
+  - A citation is `{"path": "<field path>", "quote": "<verbatim excerpt>"}`.
+    - `path` addresses the pinned snapshot payload (`HRRequisitionPayload.source_document()`)
+      with dotted keys and zero-based list indexes, for example `title`, `description`,
+      `responsibilities[2]` or `required_skills[0]`.
+    - `quote` is 1–300 characters.
+  - The application verifies every citation: the path must resolve to a string in the
+    payload, and the quote must be a substring of it after whitespace collapsing and
+    case-folding. Any unverified citation rejects the brief as
+    `role_brief_output_invalid/citation_unverified` (Q-25).
+  - Every `explicit_source_facts` entry, and every `responsibilities` and
+    `required_capabilities` item, must be `basis: "source_fact"` with at least one verified
+    citation (otherwise `uncited_requirement`). `ai_inferences` and `basis: "ai_inference"`
+    items may cite supporting refs, but they need not.
+  - Lineage is stored on the brief: `source_snapshot_id` plus `source_payload_hash`.
+- **Reason:** Tech Arch §9 ("evidence references for material claims") and §5.1 ("do not let
+  the model invent mandatory requirements"). Exact-substring checks are deterministic and
+  cheap, and the UI can show the quote without exposing the raw payload (D-11).
+
+## D-37 Model choice, prompt/schema versioning and `role_brief_version` schema
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** Role Brief (AI) (BE-6.2, BE-6.4, BE-6.5)
+- **Decision:**
+  - **Model:**
+    - Default `AI_MODEL=openai/gpt-oss-120b` (the kickoff recommendation, available on the
+      user's key).
+    - Call settings: temperature 0, a JSON-schema `response_format`, and
+      `AI_TIMEOUT_SECONDS=60`.
+    - The application validates the output regardless of provider-side schema enforcement.
+    - The model name reported by the provider is stored per brief, as `model_provider` and
+      `model_name`. `created_by` is `ai_model:<provider>/<model>`.
+  - **Versions:**
+    - `ROLE_BRIEF_PROMPT_VERSION="role_brief.v1"` and `ROLE_BRIEF_SCHEMA_VERSION="1"` are
+      constants in `role_briefs/constants.py`.
+    - Any change to the prompt text or the schema bumps the matching version.
+    - Both versions are stored on every brief and in the `RoleBriefCreated` audit details.
+  - **Table:** Data Model §4.4, plus these additive columns: `screening_run_id` (FK, the run
+    that generated it), `source_payload_hash`, `prompt_version`, `model_provider` and
+    `model_name`.
+  - **Brief status:** `draft | awaiting_review | approved | superseded`. New briefs are
+    `awaiting_review`, and `draft`/`superseded` are reserved.
+  - **Version number:** `version_number` is max+1 per requisition. The unique
+    `(requisition_id, version_number)` constraint turns a race into a rollback.
+  - **Immutability:** enforced in the repository. The only update is the conditional
+    `awaiting_review → approved` (approver and time). There is no DB trigger, consistent
+    with D-26 on SQLite.
+  - **No FK:** none is added on the existing `screening_run.role_brief_version_id`. On
+    SQLite that would need a table rebuild (batch ALTER), which D-01 avoids. The service
+    guarantees the link.
+- **Reason:** Data Model §8 lineage needs prompt and model versions per interpretation, and
+  §4.4 requires approved versions to be immutable.
+
+## D-38 Phase-1 mapping, approval of ambiguities and UI polling (amends D-11, D-24)
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** Role Brief (AI) (BE-6.5, BE-6.6, FE-7.4)
+- **Decision:**
+  - **Phase 1 mapping (amends D-11 additively).** `phases.phase_1` gains
+    `awaiting_role_approval → "awaiting_approval"`, and `role_configuration` and every later
+    non-blocked state map to `"completed"`. `blocked` stays `"blocked"`.
+  - **Ambiguities.** The run always goes to `awaiting_role_approval`. `awaiting_role_review`
+    (Tech Arch §5.1 step 8) is not used (Q-27). Approving accepts the listed ambiguities,
+    and `RoleBriefApproved` records the `material_ambiguities` count.
+  - **Run status response.** It gains nullable `role_brief_version_id` (additive).
+  - **UI polling (amends D-24).** With `NEXT_PUBLIC_FEATURE_ROLE_BRIEF=true`, the stopping
+    statuses are `awaiting_role_approval`, `role_configuration` and `blocked`, and
+    `role_brief_draft` keeps polling (the 2 s interval and 120 s cap are unchanged). With the
+    flag off, D-24 applies unchanged.
+- **Reason:** System Design §5: Phase 1 completes when the brief is approved and critical
+  ambiguities are "resolved or explicitly accepted". The flag keeps today's UI behaviour
+  intact (D-02).
+
+## D-39 Module layout for role_briefs and the AI gateway (extends D-13, D-23)
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** Role Brief (AI) (BE-6.3, BE-6.5, BE-6.6, BE-6.7)
+- **Decision:**
+  - **`role_briefs`.** `backend/app/modules/role_briefs/` uses exactly the seven standard
+    files. The prompt text lives in `constants.py`, and the output schema in `schemas.py`.
+  - **AI gateway.** It sits in `integrations`: `adapters/ai_model/{base.py, mock.py,
+    groq.py, fixtures/*.json}` plus `AIGatewayService` and `build_ai_model_adapter` in
+    `integrations/service.py`. `groq.py` is the one file beyond the D-13 adapter shape.
+    One file per real provider is allowed from now on.
+  - **Dependencies.** `httpx` moves from dev to runtime dependencies. There is no
+    provider SDK.
+  - **Cross-module calls.** `RoleBriefService` reads and transitions runs through the
+    `requisitions` repository (`get_for_workflow`, `get_for_principal`, `transition`) and
+    loads snapshots through `SnapshotService`. `requisitions` never imports `role_briefs`.
+    The ingestion and generation handlers are composed in `app/main.py`.
+  - **OpenAPI export.** `scripts/export_openapi.py` pins `FEATURE_ROLE_BRIEF=true` and
+    `AI_PROVIDER=mock`.
+- **Reason:** The backend-engineer module shape needs a decision for extra files. Keeping
+  provider adapters in `integrations` follows ARCHITECTURE ("external systems are adapters
+  inside `integrations`"). One-way imports avoid cycles.
+
 ---
 
 Never renumber existing IDs. New decisions are appended as D-05, D-06, …
