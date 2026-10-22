@@ -749,7 +749,7 @@ Numbered from Q-10 so they do not collide with the Requisitions Q-1…Q-9.
 ## Feature: SQLite default database
 
 - **Kickoff:** `docs/prompts/kickoffs/2026-10-22-sqlite-default.md`
-- **Plan status:** AWAITING APPROVAL. D-26 is Accepted (user decisions, 2026-10-22).
+- **Plan status:** APPROVED by the user, 2026-10-22 — all defaults accepted (Q-17…Q-21); D-27…D-30 Accepted. D-26 is Accepted (user decisions, 2026-10-22).
   D-27…D-30 are "Proposed — awaiting approval". The defaults below make the plan
   buildable. If approval changes a default, I amend the affected tasks before the build
   starts.
@@ -949,6 +949,8 @@ behaviour.
 ### Open questions for approval (SQLite default)
 
 Numbered from Q-17 so they do not collide with Q-1…Q-16.
+
+**Resolved 2026-10-22:** the user approved all defaults (Q-17…Q-21).
 
 - **Q-17** Approve or amend D-27…D-30. Defaults: edit 0001/0002 in place, use the app
   clock on both dialects, use the connection setup and guard as written, and use the

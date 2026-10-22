@@ -479,7 +479,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-27 Migrations 0001 and 0002 become dialect-aware in place (D-01 exception)
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** SQLite default database (BE-5.5)
 - **Decision:** `0001_audit_event.py` and `0002_requisitions.py` are edited in place to
@@ -503,7 +503,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-28 Portable column types and app-side defaults on both dialects
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** SQLite default database (BE-5.3, BE-5.4)
 - **Decision:**
@@ -529,7 +529,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-29 SQLite connection setup and the copy guard for database files (extends D-16)
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** SQLite default database (BE-5.3, BE-5.6)
 - **Decision:**
@@ -556,7 +556,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-30 PostgreSQL-only tests are marked and skipped on SQLite
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** SQLite default database (BE-5.7)
 - **Decision:**
