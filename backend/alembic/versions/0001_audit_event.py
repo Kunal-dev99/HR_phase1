@@ -7,6 +7,10 @@ Create Date: 2026-10-22
 D-01: additive only. D-02: downgrade() drops the triggers, the function, the index and the
 table. Once real audit data exists in a shared environment, downgrading this revision needs
 a new decision (it destroys audit records).
+
+D-27: dialect-aware in place. PostgreSQL output is unchanged. On SQLite: JSON instead of
+JSONB, no server defaults (the app supplies id and timestamp, D-28), and no plpgsql
+function or triggers (audit immutability is app level only there, D-26).
 """
 
 from collections.abc import Sequence
@@ -23,11 +27,19 @@ depends_on: str | Sequence[str] | None = None
 FUNCTION = "audit_event_reject_mutation"
 
 
+def _is_postgresql() -> bool:
+    return bool(op.get_context().dialect.name == "postgresql")
+
+
 def upgrade() -> None:
+    pg = _is_postgresql()
     op.create_table(
         "audit_event",
         sa.Column(
-            "id", sa.Uuid(), primary_key=True, server_default=sa.text("gen_random_uuid()")
+            "id",
+            sa.Uuid(),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()") if pg else None,
         ),
         sa.Column("screening_run_id", sa.Uuid(), nullable=False),
         sa.Column("entity_type", sa.String(64), nullable=False),
@@ -39,13 +51,13 @@ def upgrade() -> None:
             "timestamp",
             sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("clock_timestamp()"),
+            server_default=sa.text("clock_timestamp()") if pg else None,
         ),
         sa.Column("correlation_id", sa.String(64), nullable=False),
         sa.Column("configuration_version_id", sa.Uuid(), nullable=True),
         sa.Column("reason_code", sa.String(64), nullable=True),
         sa.Column("details_reference", sa.String(512), nullable=True),
-        sa.Column("details", postgresql.JSONB(), nullable=True),
+        sa.Column("details", postgresql.JSONB() if pg else sa.JSON(), nullable=True),
         sa.PrimaryKeyConstraint("id", name="pk_audit_event"),
     )
     op.create_index(
@@ -53,6 +65,8 @@ def upgrade() -> None:
         "audit_event",
         ["screening_run_id", "timestamp"],
     )
+    if not pg:
+        return
     op.execute(
         f"""
         CREATE FUNCTION {FUNCTION}() RETURNS trigger
@@ -81,8 +95,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP TRIGGER IF EXISTS audit_event_no_truncate ON audit_event")
-    op.execute("DROP TRIGGER IF EXISTS audit_event_no_update_delete ON audit_event")
-    op.execute(f"DROP FUNCTION IF EXISTS {FUNCTION}()")
+    if _is_postgresql():
+        op.execute("DROP TRIGGER IF EXISTS audit_event_no_truncate ON audit_event")
+        op.execute("DROP TRIGGER IF EXISTS audit_event_no_update_delete ON audit_event")
+        op.execute(f"DROP FUNCTION IF EXISTS {FUNCTION}()")
     op.drop_index("ix_audit_event_screening_run_id_timestamp", table_name="audit_event")
     op.drop_table("audit_event")

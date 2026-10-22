@@ -7,6 +7,10 @@ Create Date: 2026-10-22
 D-01: additive only (five new tables and their indexes). ``status`` has no DB CHECK so
 later states stay additive (D-10). D-02: downgrade() drops the five tables in reverse FK
 order. Audit rows that reference runs stay in ``audit_event`` (no FK by design, D-12).
+
+D-27: dialect-aware in place. PostgreSQL output is unchanged. On SQLite: JSON instead of
+JSONB and of the varchar array (server default ``'[]'``), and no UUID or timestamp server
+defaults (the app supplies them, D-28).
 """
 
 from collections.abc import Sequence
@@ -24,9 +28,16 @@ depends_on: str | Sequence[str] | None = None
 _NOW = sa.text("clock_timestamp()")
 
 
+def _is_postgresql() -> bool:
+    return bool(op.get_context().dialect.name == "postgresql")
+
+
 def _id() -> sa.Column[Any]:
     return sa.Column(
-        "id", sa.Uuid(), primary_key=True, server_default=sa.text("gen_random_uuid()")
+        "id",
+        sa.Uuid(),
+        primary_key=True,
+        server_default=sa.text("gen_random_uuid()") if _is_postgresql() else None,
     )
 
 
@@ -35,11 +46,16 @@ def _ts(name: str, *, nullable: bool = False, default: bool = False) -> sa.Colum
         name,
         sa.DateTime(timezone=True),
         nullable=nullable,
-        server_default=_NOW if default else None,
+        server_default=_NOW if default and _is_postgresql() else None,
     )
 
 
+def _json() -> Any:
+    return postgresql.JSONB() if _is_postgresql() else sa.JSON()
+
+
 def upgrade() -> None:
+    pg = _is_postgresql()
     op.create_table(
         "requisition",
         _id(),
@@ -65,7 +81,7 @@ def upgrade() -> None:
     op.create_table(
         "requisition_snapshot_payload",
         _id(),
-        sa.Column("payload", postgresql.JSONB(), nullable=False),
+        sa.Column("payload", _json(), nullable=False),
         sa.Column("payload_hash", sa.String(80), nullable=False),
         _ts("created_at", default=True),
         sa.PrimaryKeyConstraint("id", name="pk_requisition_snapshot_payload"),
@@ -105,12 +121,12 @@ def upgrade() -> None:
         sa.Column("business_unit_key", sa.String(64), nullable=True),
         sa.Column(
             "scope_business_units",
-            postgresql.ARRAY(sa.String(64)),
+            postgresql.ARRAY(sa.String(64)) if pg else sa.JSON(),
             nullable=False,
-            server_default=sa.text("'{}'::varchar[]"),
+            server_default=sa.text("'{}'::varchar[]") if pg else sa.text("'[]'"),
         ),
         sa.Column("status", sa.String(64), nullable=False),
-        sa.Column("status_details", postgresql.JSONB(), nullable=True),
+        sa.Column("status_details", _json(), nullable=True),
         sa.Column("started_by", sa.String(128), nullable=True),
         sa.Column("correlation_id", sa.String(64), nullable=False),
         _ts("started_at", default=True),
