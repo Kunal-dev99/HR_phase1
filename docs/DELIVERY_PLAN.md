@@ -293,11 +293,11 @@ Do not add exhaustive matrices or extra hardening tests. `ruff`, `mypy`, `pytest
 migration round trip stay mandatory. **Precondition (met 2026-10-22, D-19 Accepted):** D-19 (run scope capture) must be
 approved before BE-2.3 and BE-2.4 rely on `scope_business_units`.
 
-- [ ] BE-2.1 Isolation setup (D-03). Create worktree
+- [x] BE-2.1 Isolation setup (D-03). Create worktree
   `/home/user/HR_phase1-worktrees/p1req-phase2` on branch `feature/p1-requisitions-phase2`,
   based on the reviewed Phase 1 branch. The copy DB is migrated to `0002_requisitions`.
   Done-when: the report shows `git worktree list` with the Phase 2 path, and `alembic current` on the copy shows `0002_requisitions`.
-- [ ] BE-2.2 Run executor (**PROPOSED (D-06)**). Add a `RunExecutor` interface with
+- [x] BE-2.2 Run executor (**PROPOSED (D-06)**). Add a `RunExecutor` interface with
   `dispatch(run_id)`. `InProcessExecutor` uses an asyncio task with its own DB session,
   started only after the request's transaction commits, and it tracks and awaits tasks on
   shutdown. `InlineExecutor` is for tests. Setting `RUN_EXECUTOR` takes `in_process` (the
@@ -307,7 +307,7 @@ approved before BE-2.3 and BE-2.4 rely on `scope_business_units`.
   audit event. If `FEATURE_SCREENING_RUNS=true` and `HR_SYSTEM_ADAPTER` is unset, startup
   fails.
   Done-when: `test_executor.py::test_dispatch_after_commit_only`, `test_executor.py::test_startup_recovery_redispatches_created_and_blocks_stale`, and `test_executor.py::test_double_dispatch_ingests_once` pass.
-- [ ] BE-2.3 `POST /api/v1/screening-runs`. Permission: `screening_run:create`
+- [x] BE-2.3 `POST /api/v1/screening-runs`. Permission: `screening_run:create`
   (**PROPOSED (D-08)**). Body: `{"external_requisition_id": str}`, 1–128 chars, trimmed,
   extra fields forbidden (**PROPOSED (D-11)**). The response is `202 Accepted` with body
   `{run_id, status: "created", status_url, correlation_id}`, a `Location` header and an
@@ -315,7 +315,7 @@ approved before BE-2.3 and BE-2.4 rely on `scope_business_units`.
   `ScreeningRunService` and the executor. It never calls a repository. The route is mounted
   only when `FEATURE_SCREENING_RUNS=true`.
   Done-when: `test_api_screening_runs.py::test_post_returns_202_with_run_id_and_status_url`, `test_api_screening_runs.py::test_post_without_principal_401`, and `test_api_screening_runs.py::test_post_without_permission_403` pass.
-- [ ] BE-2.4 `GET /api/v1/screening-runs/{run_id}`. Permission: `screening_run:read`
+- [x] BE-2.4 `GET /api/v1/screening-runs/{run_id}`. Permission: `screening_run:read`
   (**PROPOSED (D-08)**). The row is scoped through
   `ScreeningRunRepository.get_for_principal`. A run that is missing or out of scope
   returns 404 (D-09). The response follows **PROPOSED (D-11)**: `run_id`, `status`,
@@ -324,7 +324,7 @@ approved before BE-2.3 and BE-2.4 rely on `scope_business_units`.
   snapshot_id, payload_hash, captured_at}, or null), `started_at`, `completed_at` and
   `correlation_id`. It never includes the raw payload.
   Done-when: `test_api_screening_runs.py::test_get_returns_state_and_phase_status`, `test_api_screening_runs.py::test_get_other_business_unit_404`, and `test_api_screening_runs.py::test_get_without_permission_403` pass.
-- [ ] BE-2.5 End-to-end acceptance tests over HTTP (`RUN_EXECUTOR=inline`). Trimmed
+- [x] BE-2.5 End-to-end acceptance tests over HTTP (`RUN_EXECUTOR=inline`). Trimmed
   2026-10-22 under D-18 (MVP-light): one focused test per behaviour, covering the happy
   path and one blocked case.
   - Happy path: POST `REQ-OPEN-1` → 202, the run reaches `role_brief_draft`, and GET shows
@@ -337,7 +337,7 @@ approved before BE-2.3 and BE-2.4 rely on `scope_business_units`.
   Incomplete, not-found, other-BU, unavailable and malformed outcomes are already covered
   at service level by `test_ingestion.py` (BE-1.7) and are not repeated over HTTP.
   Done-when: `test_e2e_screening_runs.py::test_open_requisition_reaches_role_brief_draft` and `test_e2e_screening_runs.py::test_closed_requisition_is_blocked` pass, together with the BE-2.3 401/403 tests.
-- [ ] BE-2.6 Safe server access log (Tech Arch §6.2, §9; Phase 0 deviation e). Uvicorn's
+- [x] BE-2.6 Safe server access log (Tech Arch §6.2, §9; Phase 0 deviation e). Uvicorn's
   own access log prints query strings, but the app's request log does not. Add
   `--no-access-log` to the `uvicorn` command in `scripts/start-backend.sh`. The app's
   `app.request` JSON log, which records method, path, status, duration and correlation ID,
@@ -345,12 +345,38 @@ approved before BE-2.3 and BE-2.4 rely on `scope_business_units`.
   removing the flag reverts it.
   Done-when: during the Phase 2 manual curl check, `GET /healthz?probe=secret-value` against `scripts/start-backend.sh` prints a JSON `app.request` line, and the console contains neither `secret-value` nor a uvicorn access-log line (console excerpt in the report).
 
-**Phase 2 Done-when:** in the Phase 2 worktree against the copy, the engineer reports
+- [x] **Phase 2 Done-when:** in the Phase 2 worktree against the copy, the engineer reports
 real output with every check passing: `ruff check`, `mypy app`, `pytest`, and `alembic
 upgrade head && alembic downgrade -1 && alembic upgrade head`. In addition, a manual
 `curl` POST and GET against `scripts/start-backend.sh` (with `FEATURE_SCREENING_RUNS=true`,
 `AUTH_MODE=dev_header` and `HR_SYSTEM_ADAPTER=mock`) shows 202 followed by
 `role_brief_draft` for `REQ-OPEN-1`.
+
+**Verified 2026-10-22 (MVP-light, D-18; solution-architect).** Phase 2 is merged to
+`master` at `a1d9b85`. Light check per D-18: Grep confirms that every Done-when test exists
+under its exact name in the named file in `backend/tests/`. Assertions were not audited
+line by line.
+- `test_executor.py` has the three BE-2.2 tests.
+- `test_api_screening_runs.py` has the six BE-2.3 and BE-2.4 tests.
+- `test_e2e_screening_runs.py` has `test_open_requisition_reaches_role_brief_draft` and
+  `test_closed_requisition_is_blocked`.
+
+The worktree `/home/user/HR_phase1-worktrees/p1req-phase2` exists. The routes are gated by
+`FEATURE_SCREENING_RUNS` (`app/main.py`), and the permissions `screening_run:create` and
+`screening_run:read` are defined in `requisitions/constants.py`. `--no-access-log` is
+present in `scripts/start-backend.sh` and `scripts/start-backend.ps1`.
+
+The orchestrator's run in the Phase 2 worktree:
+- `ruff check .`: All checks passed.
+- `mypy app`: no issues in 38 source files.
+- `pytest`: 70 passed.
+- `alembic downgrade -1` and `upgrade head` ran clean, and `alembic current` shows
+  `0002_requisitions (head)`.
+
+Engineer-reported manual checks:
+- BE-2.6: the console showed only `app.request` JSON lines. A grep for `secret-value`
+  found 0 lines, and a grep for uvicorn access lines found 0.
+- Curl smoke: POST `REQ-OPEN-1` returned 202, and GET returned `role_brief_draft`.
 
 **Reversibility:** setting `FEATURE_SCREENING_RUNS=false` (the default) unmounts both
 routes and disables executor startup recovery, so the app behaves exactly as after Phase
@@ -646,6 +672,8 @@ Numbered from Q-10 so they do not collide with the Requisitions Q-1…Q-9.
   `/screening-runs/new` with `/` as a landing page. The default is `/`.
 - **Q-15** Sequencing: Phase 3 can start now. Phase 4 waits for Requisitions Phase 2 to be
   verified and merged. Do you confirm?
+  **Resolved 2026-10-22:** Requisitions Phase 2 is verified, ticked and merged to `master`
+  (`a1d9b85`). The Phase 4 precondition is met, so Phase 4 may follow Phase 3 directly.
 - **Q-16** `.claude/agents/frontend-engineer.md` still says "align to the design system
   bundle". Under D-20 the in-repo `frontend/src/components/ui/` set is that design system.
   The agent file is outside the architect's ownership. Should its owner update the wording
