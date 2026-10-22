@@ -15,6 +15,8 @@ from app.core.settings import get_settings
 
 # Every module's models are imported so Base.metadata is complete (autogenerate support).
 from app.modules.audit import models as audit_models  # noqa: F401
+from app.modules.integrations import models as integrations_models  # noqa: F401
+from app.modules.requisitions import models as requisitions_models  # noqa: F401
 
 config = context.config
 

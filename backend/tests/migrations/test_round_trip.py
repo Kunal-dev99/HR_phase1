@@ -35,12 +35,22 @@ async def _public_tables(url: str) -> set[str]:
         await engine.dispose()
 
 
+PHASE1_TABLES = {
+    "requisition",
+    "requisition_snapshot",
+    "requisition_snapshot_payload",
+    "screening_run",
+    "integration_attempt",
+}
+
+
 def test_migration_round_trip(migrated_database: str) -> None:
     cfg = alembic_config()
     head = ScriptDirectory.from_config(cfg).get_current_head()
 
     assert asyncio.run(_current_revision(migrated_database)) == head
     tables_at_head = asyncio.run(_public_tables(migrated_database))
+    assert PHASE1_TABLES | {"audit_event"} <= tables_at_head
 
     command.downgrade(cfg, "base")
     assert asyncio.run(_current_revision(migrated_database)) is None
@@ -49,3 +59,14 @@ def test_migration_round_trip(migrated_database: str) -> None:
     command.upgrade(cfg, "head")
     assert asyncio.run(_current_revision(migrated_database)) == head
     assert asyncio.run(_public_tables(migrated_database)) == tables_at_head
+
+
+def test_downgrade_0002_removes_only_its_tables(migrated_database: str) -> None:
+    cfg = alembic_config()
+    try:
+        command.downgrade(cfg, "0001_audit_event")
+        assert asyncio.run(_current_revision(migrated_database)) == "0001_audit_event"
+        assert asyncio.run(_public_tables(migrated_database)) == {"audit_event"}
+    finally:
+        command.upgrade(cfg, "head")
+    assert PHASE1_TABLES <= asyncio.run(_public_tables(migrated_database))
