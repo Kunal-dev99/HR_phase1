@@ -1011,8 +1011,21 @@ Numbered from Q-17 so they do not collide with Q-1…Q-16.
 
 ---
 
-## Feature: Role Brief (AI)
+## Feature: Role Brief (AI) — COMPLETE
 
+- **Verified 2026-10-22 (MVP-light, D-18).** Phases 6 (backend) and 7 (frontend) built,
+  verified and merged to the session branch (Phase 7 at `32a2c14`). Frontend evidence
+  (Grep): `src/api/role-briefs.ts` (`getRoleBrief`, `approveRoleBrief`),
+  `src/api/messages.ts` (role-brief labels + `role_brief:approve` 403), `src/features.ts`
+  (`isRoleBriefEnabled`), `src/dev-auth/presets.ts` (`dev-approver-bu-1`,
+  `role_brief:approve`), `src/app/screening-runs/[runId]/RoleBriefPanel.tsx`, and
+  0 `dangerouslySetInnerHTML` under `frontend/src`. Gates: `npm run build/typecheck/lint`
+  exit 0; backend ruff clean, mypy clean (50 files), pytest 67 passed / 9 skipped (SQLite).
+  Browser walkthrough (mock AI) passed all four steps. Known MVP deviations: the approve
+  button renders for any principal in `awaiting_role_approval` (backend enforces
+  `role_brief:approve`, D-04); the Role card omits responsibilities/capabilities; no separate
+  flag-off walkthrough (D-24 path unchanged). **Still pending with the user:** BE-6.8
+  real-Groq smoke test.
 - **Kickoff:** `docs/prompts/kickoffs/2026-10-22-role-brief.md`
 - **Plan status:** APPROVED by the user, 2026-10-22 — all defaults accepted (Q-22…Q-28); D-32…D-39 Accepted. D-31 records the user's decisions
   (Accepted). D-32…D-39 are "Proposed — awaiting approval", and the tasks below use their
@@ -1334,12 +1347,12 @@ ambiguities clearly separated and each traceable to a snapshot path and quote. A
 `role_brief:approve` can approve it.
 **Precondition:** Phase 6 verified, ticked and merged to `master`.
 
-- [ ] FE-7.1 Isolation setup (D-03). Create worktree
+- [x] FE-7.1 Isolation setup (D-03). Create worktree
   `/home/user/HR_phase1-worktrees/role-brief-phase7` on branch `feature/role-brief-phase7`
   from `master` with Phase 6 merged. Migrate `backend/hr_phase1_rolebrief_copy.db` in the
   worktree to head.
   Done-when: the report shows `git worktree list` with the Phase 7 path and `alembic current` showing `0003_role_briefs (head)`.
-- [ ] FE-7.2 API functions and messages. Run `npm run gen:api`. Add
+- [x] FE-7.2 API functions and messages. Run `npm run gen:api`. Add
   `frontend/src/api/role-briefs.ts` with `getRoleBrief(runId)` and
   `approveRoleBrief(runId, roleBriefVersionId)`, typed only from `src/api/schema.d.ts`. In
   `src/api/messages.ts` add:
@@ -1350,14 +1363,14 @@ ambiguities clearly separated and each traceable to a snapshot path and quote. A
   - a 409 message on approve ("This brief can no longer be approved. Refresh.");
   - a 404 message on the brief GET ("No role brief yet.").
   Done-when: `npm run typecheck` passes and Grep finds no hand-written `(type|interface) .*RoleBrief` under `frontend/src` outside `src/api/schema.d.ts`.
-- [ ] FE-7.3 UI flag and dev preset (D-34, D-38, D-21). Add `isRoleBriefEnabled()`
+- [x] FE-7.3 UI flag and dev preset (D-34, D-38, D-21). Add `isRoleBriefEnabled()`
   (`NEXT_PUBLIC_FEATURE_ROLE_BRIEF`, default `false`) to `frontend/src/features.ts`, and
   `NEXT_PUBLIC_FEATURE_ROLE_BRIEF=false` to `frontend/.env.example`. In
   `frontend/src/dev-auth/presets.ts` add the preset "Approver bu-1" (`dev-approver-bu-1`,
   permissions `screening_run:read, role_brief:approve`, `bu-1`). The existing four presets
   are unchanged.
   Done-when: `npm run build`, `npm run lint` and `npm run typecheck` pass and Grep finds `role_brief:approve` in `frontend/src/dev-auth/presets.ts`.
-- [ ] FE-7.4 Role brief panel and approve on the run status page (D-38, D-20).
+- [x] FE-7.4 Role brief panel and approve on the run status page (D-38, D-20).
   - **Polling.** In `RunStatusView.tsx`, when `isRoleBriefEnabled()`, the stopping
     statuses become `awaiting_role_approval`, `role_configuration` and `blocked`, and
     `role_brief_draft` keeps polling. When the flag is off, D-24 is unchanged. Status tones:
@@ -1380,7 +1393,7 @@ ambiguities clearly separated and each traceable to a snapshot path and quote. A
   - All text is rendered as escaped data.
   Done-when: `npm run build`, `npm run lint` and `npm run typecheck` pass and Grep finds no `dangerouslySetInnerHTML` under `frontend/src`.
 
-- [ ] **Phase 7 Done-when:** in the Phase 7 worktree, `npm run build`, `npm run lint` and
+- [x] **Phase 7 Done-when:** in the Phase 7 worktree, `npm run build`, `npm run lint` and
   `npm run typecheck` pass, and backend `ruff check .`, `mypy app` and `pytest` pass. One
   browser walkthrough (screenshots in the report) is run with the backend from
   `scripts/start-backend.sh` (`FEATURE_SCREENING_RUNS=true`, `FEATURE_ROLE_BRIEF=true`,
