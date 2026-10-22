@@ -13,7 +13,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.core.db import Base
 from app.core.settings import get_settings
 
-# Import every module's models here so Base.metadata is complete for autogenerate.
+# Every module's models are imported so Base.metadata is complete (autogenerate support).
+from app.modules.audit import models as audit_models  # noqa: F401
 
 config = context.config
 
