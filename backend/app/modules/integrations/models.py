@@ -9,10 +9,10 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Uuid, text
+from sqlalchemy import ForeignKey, Index, Integer, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db import Base
+from app.core.db import Base, UTCDateTime
 from app.modules.integrations import constants as c
 
 
@@ -28,9 +28,7 @@ class IntegrationAttempt(Base):
     )
     __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, primary_key=True, default=uuid.uuid4, server_default=text("gen_random_uuid()")
-    )
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     screening_run_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("screening_run.id"), nullable=False
     )
@@ -44,6 +42,6 @@ class IntegrationAttempt(Base):
     http_status: Mapped[int | None] = mapped_column(Integer)
     outcome: Mapped[str] = mapped_column(String(c.OUTCOME_MAX), nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(c.ERROR_CODE_MAX))
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime] = mapped_column(UTCDateTime, nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
+    next_retry_at: Mapped[datetime | None] = mapped_column(UTCDateTime)

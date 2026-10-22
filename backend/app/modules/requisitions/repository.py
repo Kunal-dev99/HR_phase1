@@ -12,12 +12,14 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from datetime import timedelta
 from typing import Any, Protocol
 
 from sqlalchemy import ColumnElement, and_, func, or_, select, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.db import utc_now
 from app.core.security import Principal
 from app.modules.requisitions import constants as c
 from app.modules.requisitions.constants import RunStatus
@@ -45,15 +47,22 @@ class RequisitionRepository:
         self._session = session
 
     async def upsert(self, data: RequisitionUpsert) -> Requisition:
-        """``INSERT … ON CONFLICT (hr_system_key, external_requisition_id) DO UPDATE``."""
+        """``INSERT … ON CONFLICT (hr_system_key, external_requisition_id) DO UPDATE``.
+
+        The dialect's own ``insert`` is used (PostgreSQL or SQLite, D-28); timestamps come
+        from the app clock.
+        """
         values = data.model_dump()
-        insert = pg_insert(Requisition).values(**values, last_synced_at=func.clock_timestamp())
+        now = utc_now()
+        dialect = self._session.get_bind().dialect.name
+        insert_fn = sqlite.insert if dialect == "sqlite" else postgresql.insert
+        insert = insert_fn(Requisition).values(**values, last_synced_at=now)
         stmt = insert.on_conflict_do_update(
             index_elements=[Requisition.hr_system_key, Requisition.external_requisition_id],
             set_={
                 **{name: insert.excluded[name] for name in _SOURCE_FIELDS},
-                "last_synced_at": func.clock_timestamp(),
-                "updated_at": func.clock_timestamp(),
+                "last_synced_at": now,
+                "updated_at": now,
             },
         ).returning(Requisition)
         result = await self._session.scalars(stmt, execution_options=_REFRESH)
@@ -193,7 +202,7 @@ class ScreeningRunRepository:
 
     async def list_stale_ids(self, status: RunStatus, older_than_seconds: int) -> list[uuid.UUID]:
         """Unscoped, for startup recovery only: runs in ``status`` started too long ago."""
-        cutoff = func.clock_timestamp() - func.make_interval(0, 0, 0, 0, 0, 0, older_than_seconds)
+        cutoff = utc_now() - timedelta(seconds=older_than_seconds)
         result = await self._session.scalars(
             select(ScreeningRun.id).where(
                 ScreeningRun.status == status.value, ScreeningRun.started_at < cutoff
@@ -236,7 +245,7 @@ class ScreeningRunRepository:
         }
         values.update({k: v for k, v in optional.items() if v is not None})
         if completed:
-            values["completed_at"] = func.clock_timestamp()
+            values["completed_at"] = utc_now()
         stmt = (
             update(ScreeningRun)
             .where(ScreeningRun.id == run_id, ScreeningRun.status == expected_status.value)
