@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -31,6 +32,9 @@ class AuthMode(StrEnum):
 
 MOCK_HR_SYSTEM_ADAPTER = "mock"
 
+# backend/.env, independent of the current working directory.
+ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+
 
 class UnsafeConfigurationError(ValueError):
     """Raised when the configuration is not allowed for the environment."""
@@ -38,7 +42,7 @@ class UnsafeConfigurationError(ValueError):
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="ignore",
