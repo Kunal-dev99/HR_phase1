@@ -1,4 +1,9 @@
-"""Async Alembic environment (BE-0.3). Reads DATABASE_URL from app settings."""
+"""Async Alembic environment (BE-0.3). Reads DATABASE_URL from app settings.
+
+BE-1.8 (D-16): when ``ENVIRONMENT`` is ``development`` or ``test``, the database must be a
+copy (name ending in ``_copy`` or ``_test``). The check runs before any connection is
+opened; a refusal prints the rejected database name and exits non-zero.
+"""
 
 from __future__ import annotations
 
@@ -6,11 +11,13 @@ import asyncio
 from logging.config import fileConfig
 
 from alembic import context
+from alembic.util import CommandError
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.db import Base
+from app.core.db_guard import UnsafeDatabaseError, guard_database_for_environment
 from app.core.settings import get_settings
 
 # Every module's models are imported so Base.metadata is complete (autogenerate support).
@@ -27,8 +34,14 @@ target_metadata = Base.metadata
 
 
 def _database_url() -> str:
+    """The target URL, refused before connecting if it is not a copy (D-03, D-16)."""
     url = config.attributes.get("database_url")
-    return str(url) if url else get_settings().DATABASE_URL
+    resolved = str(url) if url else get_settings().DATABASE_URL
+    try:
+        guard_database_for_environment(resolved, get_settings().ENVIRONMENT)
+    except UnsafeDatabaseError as exc:
+        raise CommandError(str(exc)) from None
+    return resolved
 
 
 def run_migrations_offline() -> None:
@@ -49,7 +62,8 @@ def _run_sync_migrations(connection: Connection) -> None:
 
 
 async def run_migrations_online() -> None:
-    engine = create_async_engine(_database_url(), poolclass=pool.NullPool)
+    url = _database_url()  # guarded before the engine exists
+    engine = create_async_engine(url, poolclass=pool.NullPool)
     try:
         async with engine.connect() as connection:
             await connection.run_sync(_run_sync_migrations)
