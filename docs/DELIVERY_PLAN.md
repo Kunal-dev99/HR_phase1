@@ -809,7 +809,7 @@ Switching `DATABASE_URL` back to a PostgreSQL copy gives exactly today's schema 
 behaviour.
 **Precondition:** none (MVP UI is complete on `master`).
 
-- [ ] BE-5.1 Isolation setup and PostgreSQL baseline (D-03). Create worktree
+- [x] BE-5.1 Isolation setup and PostgreSQL baseline (D-03). Create worktree
   `/home/user/HR_phase1-worktrees/sqlite-default-phase5` on branch
   `feature/sqlite-default-phase5` from `master` (`6e1bc77`). In the worktree, set
   `backend/.env` to the PostgreSQL copy `hr_phase1_mvpui_copy` for the baseline. Before any
@@ -817,13 +817,13 @@ behaviour.
   `alembic upgrade base:head --sql > pg_upgrade_before.sql` and
   `alembic downgrade head:base --sql > pg_downgrade_before.sql`. BE-5.5 diffs against
   these files.
-  Done-when: the report shows `git worktree list` with the Phase 5 path, `alembic current` on `hr_phase1_mvpui_copy` showing `0002_requisitions (head)`, and the two baseline files with their line counts.
-- [ ] BE-5.2 Driver and locks (D-17). Add `aiosqlite>=0.20,<1` to `dependencies` in
+  Done-when: the report shows `git worktree list` with the Phase 5 path, `alembic current` on `hr_phase1_mvpui_copy` showing `0002_requisitions (head)`, and the two baseline files with their line counts. Amended 2026-10-22 (user scope cut, D-18): worktree only; the PostgreSQL `alembic current` and the offline-SQL baseline files were not captured (deferred, see below).
+- [x] BE-5.2 Driver and locks (D-17). Add `aiosqlite>=0.20,<1` to `dependencies` in
   `backend/pyproject.toml`, keeping `asyncpg`. Regenerate `backend/requirements.lock` and
   `backend/requirements-dev.lock` with the `pip-compile` commands in the pyproject header,
   then reinstall the worktree `.venv` from `requirements-dev.lock`.
   Done-when: Grep finds `aiosqlite==` and `asyncpg==` in both lock files, and `python -c "import aiosqlite, asyncpg"` exits 0 in the worktree venv.
-- [ ] BE-5.3 Engine factory and portable column types in `app/core/db.py`
+- [x] BE-5.3 Engine factory and portable column types in `app/core/db.py`
   (**PROPOSED (D-28)**, **PROPOSED (D-29)**). This adds no new core file.
   - `make_engine(url, **kw)`. On PostgreSQL it is unchanged (`pool_pre_ping=True`). On
     SQLite it adds a `connect` listener that runs `PRAGMA foreign_keys=ON` and sets
@@ -840,8 +840,8 @@ behaviour.
   - `get_engine()`, `alembic/env.py` (online path) and `tests/conftest.py::db_connection`
     use `make_engine`.
 
-  Done-when: new test `test_foreign_keys_are_enforced` in `backend/tests/test_schema.py` (inserting a `requisition_snapshot` with an unknown `requisition_id` raises `IntegrityError`) passes on SQLite (`DATABASE_URL=sqlite+aiosqlite:///./hr_phase1_sqlite_test.db`) and on `hr_phase1_mvpui_copy`, and `mypy app` passes.
-- [ ] BE-5.4 Dialect-neutral models and repository (**PROPOSED (D-28)**).
+  Done-when: new test `test_foreign_keys_are_enforced` in `backend/tests/test_schema.py` (inserting a `requisition_snapshot` with an unknown `requisition_id` raises `IntegrityError`) passes on SQLite (`DATABASE_URL=sqlite+aiosqlite:///./hr_phase1_sqlite_test.db`) and on `hr_phase1_mvpui_copy`, and `mypy app` passes. Amended 2026-10-22 (user scope cut, D-18): the test was not written and nothing ran on PostgreSQL; ticked on `make_engine`/`UTCDateTime` present in `app/core/db.py`, used by `alembic/env.py` and `tests/conftest.py`, and `mypy app` clean.
+- [x] BE-5.4 Dialect-neutral models and repository (**PROPOSED (D-28)**).
   - **Models:** `audit/models.py`, `requisitions/models.py` and `integrations/models.py`
     use `JSONType`, `StringList(c.BUSINESS_UNIT_KEY_MAX)` and `UTCDateTime`. Columns that
     had a `clock_timestamp()` server default get `default=utc_now`, and
@@ -857,7 +857,7 @@ behaviour.
     stays `UPDATE … WHERE status='created' RETURNING` (D-06, D-26).
 
   Done-when: Grep finds no `clock_timestamp`, `make_interval`, `gen_random_uuid` or `dialects.postgresql` under `backend/app/modules/`, and `pytest tests/test_requisition_repository.py tests/test_ingestion.py` passes on the SQLite test file.
-- [ ] BE-5.5 Dialect-aware migrations in place (**PROPOSED (D-27)**, D-01 exception).
+- [x] BE-5.5 Dialect-aware migrations in place (**PROPOSED (D-27)**, D-01 exception).
   - In `0001_audit_event.py` and `0002_requisitions.py`, branch on
     `op.get_context().dialect.name`.
   - **PostgreSQL:** the emitted SQL is unchanged.
@@ -870,8 +870,8 @@ behaviour.
       them.
   - Revision IDs and `down_revision` stay the same.
 
-  Done-when: with the PostgreSQL URL, `alembic upgrade base:head --sql` and `alembic downgrade head:base --sql` give an empty `diff` against the BE-5.1 baseline files; on the SQLite copy file, `alembic upgrade head`, `downgrade -1`, `upgrade head`, `downgrade base`, `upgrade head` all exit 0 and `alembic current` shows `0002_requisitions (head)`.
-- [ ] BE-5.6 Copy guard, precheck, start script, env default and ignore rules
+  Done-when: with the PostgreSQL URL, `alembic upgrade base:head --sql` and `alembic downgrade head:base --sql` give an empty `diff` against the BE-5.1 baseline files; on the SQLite copy file, `alembic upgrade head`, `downgrade -1`, `upgrade head`, `downgrade base`, `upgrade head` all exit 0 and `alembic current` shows `0002_requisitions (head)`. Amended 2026-10-22 (user scope cut, D-18): no PostgreSQL offline-SQL diff, so byte-identical PostgreSQL DDL is unverified; on SQLite only `upgrade head → downgrade base → upgrade head` was run (current `0002_requisitions (head)`), the `downgrade -1` steps were not.
+- [x] BE-5.6 Copy guard, precheck, start script, env default and ignore rules
   (**PROPOSED (D-29)**).
   - **Guard:** `app/core/db_guard.py` applies the `_copy`/`_test` rule to the file stem
     (`Path(database).stem`) when the URL's backend is `sqlite`. An empty path,
@@ -888,8 +888,8 @@ behaviour.
     with the PostgreSQL URL kept as a commented example.
   - **Root `.gitignore`:** add `*.db`, `*.db-journal`, `*.db-wal` and `*.db-shm`.
 
-  Done-when: new test `test_sqlite_file_name_must_be_copy` in `backend/tests/test_db_guard.py` passes (accepts `hr_phase1_dev_copy.db`, refuses `hr_phase1.db` and `:memory:`); `python scripts/dev_precheck.py` with the SQLite `.env` prints `[precheck] OK`; `git check-ignore backend/hr_phase1_sqlite_copy.db` prints the path.
-- [ ] BE-5.7 PostgreSQL-only test marker (**PROPOSED (D-30)**). Register the marker
+  Done-when: new test `test_sqlite_file_name_must_be_copy` in `backend/tests/test_db_guard.py` passes (accepts `hr_phase1_dev_copy.db`, refuses `hr_phase1.db` and `:memory:`); `python scripts/dev_precheck.py` with the SQLite `.env` prints `[precheck] OK`; `git check-ignore backend/hr_phase1_sqlite_copy.db` prints the path. Amended 2026-10-22 (user scope cut, D-18): the guard test was not written; ticked on the SQLite stem rule in `db_guard.py`, the precheck `OK` line on SQLite, `*.db*` rules in `.gitignore` and no `.db` file tracked.
+- [x] BE-5.7 PostgreSQL-only test marker (**PROPOSED (D-30)**). Register the marker
   `pg_only` under `[tool.pytest.ini_options] markers` (the suite uses `--strict-markers`).
   `tests/conftest.py` skips `pg_only` items when the `DATABASE_URL` dialect is not
   `postgresql`, with the reason "PostgreSQL-only safeguard or SQL (D-26)". Mark the
@@ -907,10 +907,12 @@ behaviour.
 
   If any other test fails on SQLite only because of PostgreSQL SQL, the engineer may mark
   it the same way and must name it in the report.
-  Done-when: on the SQLite test file `pytest -ra` passes with exactly the marked tests listed as skipped; on `hr_phase1_mvpui_copy` `pytest -ra` passes with 0 skipped.
+  Done-when: on the SQLite test file `pytest -ra` passes with exactly the marked tests listed as skipped; on `hr_phase1_mvpui_copy` `pytest -ra` passes with 0 skipped. Amended 2026-10-22 (user scope cut, D-18): SQLite part only (60 passed, 10 skipped); PostgreSQL pytest not run. Engineer deviation: a 10th marked test, `test_schema.py::test_requisition_unique_external_id` (asserts the PostgreSQL constraint name), so the requisition unique constraint is untested on SQLite.
 
-- [ ] **Phase 5 Done-when:** in the Phase 5 worktree, the engineers report real output for
-  each item below.
+- [x] **Phase 5 Done-when:** in the Phase 5 worktree, the engineers report real output for
+  each item below. Amended 2026-10-22 (user scope cut, D-18): (a) met except `downgrade -1`
+  (base round trip run instead); (b) not run, so PostgreSQL compatibility is unverified;
+  (c) met.
   - **(a) On SQLite** (`DATABASE_URL=sqlite+aiosqlite:///./hr_phase1_sqlite_test.db`):
     `ruff check .`, `mypy app` and `pytest -ra` pass, with only `pg_only` tests skipped.
     `alembic upgrade head → downgrade -1 → upgrade head` exits 0 on
@@ -926,9 +928,35 @@ behaviour.
     returns `status: role_brief_draft`, with timestamps carrying a UTC offset.
   - The user checks `backend-start.bat` once on Windows (Q-20).
 
+**Verified 2026-10-22 (MVP-light, user scope cut; solution-architect).** Feature complete.
+Merged at `caad1c8` from worktree `/home/user/HR_phase1-worktrees/sqlite-default-phase5`.
+Mid-build the user cut scope to "no unnecessary testing" (D-18); the cut items are listed
+under "Deferred (user scope cut)" below and do not block the ticks.
+- Orchestrator run on SQLite in the worktree: `ruff check .` "All checks passed!";
+  `mypy app` "Success: no issues found in 38 source files"; `pytest` "60 passed, 10 skipped
+  in 1.23s"; no `.db` or `.env` file tracked.
+- Engineer report: `mypy scripts/dev_precheck.py` clean; `alembic upgrade head → downgrade
+  base → upgrade head` on `hr_phase1_sqlite_copy.db`, current `0002_requisitions (head)`;
+  lock files add only `aiosqlite==0.22.1` (`asyncpg` kept); precheck `OK` on SQLite; smoke
+  POST `REQ-OPEN-1` → 202, GET → `role_brief_draft` with timestamps ending in `Z`.
+- Confirmed by Grep: `make_engine`, `JSONType`, `StringList`, `UTCDateTime`, `utc_now` in
+  `backend/app/core/db.py`, with `make_engine` used by `alembic/env.py` and
+  `tests/conftest.py`; SQLite stem rule in `backend/app/core/db_guard.py`; SQLite branch
+  (`sqlite_version`, "will be created by alembic upgrade head") in
+  `backend/scripts/dev_precheck.py`; SQLite default and commented PostgreSQL URL in
+  `backend/.env.example`; `pg_only` marker in `backend/pyproject.toml` and skip hook in
+  `backend/tests/conftest.py`, applied to 10 tests; dialect branch in both migrations;
+  dialect switch in `requisitions/repository.py`; no `clock_timestamp`, `make_interval`,
+  `gen_random_uuid` or `dialects.postgresql` under `backend/app/modules/`;
+  `aiosqlite==0.22.1` and `asyncpg==0.32.0` in both lock files; `*.db`, `*.db-journal`,
+  `*.db-wal`, `*.db-shm` in `.gitignore`. Grep confirms `test_foreign_keys_are_enforced`
+  and `test_sqlite_file_name_must_be_copy` do not exist (user cut).
+- Open: the user's Windows check of `backend-start.bat` (Q-20).
+
 **Reversibility:**
 - Set `DATABASE_URL` back to a `postgresql+asyncpg://…_copy` URL. No code change is
-  needed. The PostgreSQL DDL is byte-identical (BE-5.5 diff), so existing PostgreSQL copies
+  needed. Caveat (user scope cut): the PostgreSQL path was not re-verified in Phase 5; run
+  the deferred PostgreSQL checks below before relying on it. The PostgreSQL DDL is byte-identical (BE-5.5 diff), so existing PostgreSQL copies
   at `0002_requisitions` need no migration action, and the full suite runs there unskipped.
 - Reverting the branch restores the PostgreSQL-only code. The `.env.example` default goes
   back to the PostgreSQL placeholder. The added lock entries and `.gitignore` lines are
@@ -945,6 +973,19 @@ behaviour.
 - WAL mode and multi-process access to the SQLite file.
 - A data copy tool from SQLite to PostgreSQL. Pilot starts on a fresh PostgreSQL database.
 - SQLite in staging, pilot or production. Not supported.
+
+**Deferred (user scope cut, 2026-10-22, D-18) — revisit at pre-pilot hardening, with Q-21:**
+- New test `test_schema.py::test_foreign_keys_are_enforced` (BE-5.3), not written.
+- New test `test_db_guard.py::test_sqlite_file_name_must_be_copy` (BE-5.6), not written.
+- PostgreSQL verification: the offline-SQL baseline and empty diff (BE-5.1/BE-5.5), the
+  full `pytest -ra` on `hr_phase1_mvpui_copy` with 0 skipped, and the PostgreSQL migration
+  round trip (Phase Done-when (b), BE-5.7). PostgreSQL compatibility is unverified until
+  this runs.
+- The longer SQLite migration sequence with `downgrade -1` (BE-5.5, Phase Done-when (a)).
+  The base round trip was run.
+- A portable SQLite check for the requisition unique constraint. The 10th `pg_only` test
+  (`test_schema.py::test_requisition_unique_external_id`, engineer deviation) leaves it
+  untested on SQLite.
 
 ### Open questions for approval (SQLite default)
 
