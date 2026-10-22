@@ -1450,3 +1450,14 @@ Numbered from Q-22 so they do not collide with Q-1…Q-21.
 - **Q-28** Model: `openai/gpt-oss-120b` with temperature 0 and JSON-schema output (D-37).
   Is a smaller or faster Groq model wanted for the demo? Should a configured fallback model
   exist? The default is no fallback; change `AI_MODEL` to switch.
+
+---
+
+### Note 2026-10-22 — PostgreSQL re-verified after D-40
+
+PostgreSQL became the default database again (D-40). The deferred PostgreSQL check from
+Phase 5 (Q-21) was run once by the orchestrator on the current code (Phase 6 worktree,
+`324bcb4`) against the copy `hr_phase1_mvpui_copy`: `pytest -q` → **75 passed, 0 skipped**
+(all 10 `pg_only` tests ran); `alembic upgrade head` → `downgrade -1` → `upgrade head`
+clean, `current` = `0003_role_briefs (head)`. The offline-SQL byte-diff against the
+pre-Phase-5 baseline was not taken (no baseline exists) and stays deferred.
