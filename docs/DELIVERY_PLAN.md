@@ -137,15 +137,21 @@ Also deferred from Phase 0 after verification (2026-10-22):
   event in this feature. Relaxing it belongs to the first feature that writes non-run
   events, and that feature needs its own decision first. Its downgrade cannot restore NOT
   NULL once null rows exist, and append-only rows cannot be deleted to make that possible.
-- **Dependency lockfile** (D-17, Accepted). There is no lockfile today, and versions are
+- [x] **Dependency lockfile** (D-17, Accepted). There is no lockfile today, and versions are
   ranges in `backend/pyproject.toml`. If D-17 is accepted, generate and commit the lock
   before the Phase 1 build starts.
+  **Done** in commits `967fba0` / `add315f`: `backend/requirements.lock` and
+  `backend/requirements-dev.lock` are committed (verified 2026-10-22).
 - **Committed OpenAPI export** (D-14, Accepted). The docs and OpenAPI routes are not
   mounted. An export script that writes `app.openapi()` to a file comes with the first
   frontend feature, which matches the Phase 2 deferral of TypeScript type generation.
-- **Tests for the 32-key `details` limit and the startup route check.** Today
+- [x] **Tests for the 32-key `details` limit and the startup route check.** Today
   `test_details_must_be_small` covers only string length. Add these with D-15 if it is
   accepted.
+  **Done** in commits `967fba0` / `add315f`:
+  `test_audit.py::test_details_key_count_and_key_length_limits` and
+  `test_security.py::test_create_app_refuses_unprotected_route` exist and pass in the
+  orchestrator's 59-passed run (verified 2026-10-22).
 
 ---
 
@@ -154,12 +160,12 @@ Also deferred from Phase 0 after verification (2026-10-22):
 Goal: the full ingestion workflow, callable as a service. Phase 1 exposes no new
 endpoint, which keeps it inert in a running app.
 
-- [ ] BE-1.1 Isolation setup (D-03). Create worktree
+- [x] BE-1.1 Isolation setup (D-03). Create worktree
   `/home/user/HR_phase1-worktrees/p1req-phase1` on branch `feature/p1-requisitions-phase1`,
   based on the reviewed Phase 0 branch. Reuse `hr_phase1_p1req_copy` migrated to Phase 0
   head, or recreate it.
   Done-when: the report shows `git worktree list` with the Phase 1 path, and `alembic current` on the copy shows `0001_audit_event`.
-- [ ] BE-1.2 Migration `0002_requisitions`. It creates:
+- [x] BE-1.2 Migration `0002_requisitions`. It creates:
   - `requisition` (Data Model §4.1 + `business_unit_key`, unique
     `(hr_system_key, external_requisition_id)`);
   - `requisition_snapshot` (§4.2);
@@ -171,7 +177,7 @@ endpoint, which keeps it inert in a running app.
   `status` is a string checked by the application enum, with no DB CHECK, so later
   states stay additive. `downgrade()` drops these five tables in reverse FK order.
   Done-when: `test_migration_round_trip` passes with `0002` at head, and `test_schema.py::test_requisition_unique_external_id` raises IntegrityError on a duplicate.
-- [ ] BE-1.3 `requisitions` models and scoped repositories. Add `RequisitionRepository`
+- [x] BE-1.3 `requisitions` models and scoped repositories. Add `RequisitionRepository`
   (`upsert` via `INSERT … ON CONFLICT (hr_system_key, external_requisition_id) DO UPDATE`
   of source fields only), `SnapshotRepository` and `ScreeningRunRepository`.
   `ScreeningRunRepository.get_for_principal(run_id, principal)` applies the
@@ -179,7 +185,7 @@ endpoint, which keeps it inert in a running app.
   services may use but routers never import. `claim_for_ingestion(run_id)` is a
   conditional `UPDATE … WHERE status='created' RETURNING`.
   Done-when: `test_run_scoping.py::test_principal_cannot_read_other_business_unit_run` and `test_run_scoping.py::test_claim_is_single_winner` pass.
-- [ ] BE-1.4 `integrations` module: HR System adapter contract and mock. Add an
+- [x] BE-1.4 `integrations` module: HR System adapter contract and mock. Add an
   `HRSystemAdapter` protocol with `get_requisition(external_requisition_id) ->
   HRRequisitionPayload`, typed errors (`RequisitionNotFound`, `HRSystemUnavailable`,
   `InvalidHRResponse`), and a pydantic validation schema for the payload. Add
@@ -197,7 +203,7 @@ endpoint, which keeps it inert in a running app.
   call writes an `integration_attempt` row (operation, correlation_id, attempt_number=1,
   outcome, error_code; no payload body).
   Done-when: `test_hr_mock_adapter.py::test_fixture_outcomes` covers all seven fixture cases, and `test_hr_mock_adapter.py::test_integration_attempt_recorded_without_payload` passes.
-- [ ] BE-1.5 Snapshot store (**PROPOSED (D-05)**). The `SnapshotStore` interface has
+- [x] BE-1.5 Snapshot store (**PROPOSED (D-05)**). The `SnapshotStore` interface has
   `put(payload) -> (payload_reference, payload_hash)` and `get(reference,
   expected_hash)`. `DbSnapshotStore` writes canonical JSON (sorted keys, UTF-8, compact
   separators) and computes `sha256:<hex>`. `get` recomputes the hash and raises
@@ -205,13 +211,13 @@ endpoint, which keeps it inert in a running app.
   snapshot hash, the existing snapshot is reused. `schema_version` comes from constant
   `REQUISITION_INGESTION_SCHEMA_VERSION = "1"`.
   Done-when: `test_snapshot_store.py::test_hash_is_canonical_and_verified`, `test_snapshot_store.py::test_tampered_payload_raises`, and `test_snapshot_store.py::test_identical_payload_reuses_snapshot` pass.
-- [ ] BE-1.6 Eligibility rules (**PROPOSED (D-07)**). A pure function
+- [x] BE-1.6 Eligibility rules (**PROPOSED (D-07)**). A pure function
   `check_eligibility(payload, eligible_statuses) -> EligibilityResult(eligible,
   reason_code, missing_fields, rules_version)` lives in `requisitions/service.py`, with
   the rules in `constants.py`. Setting `REQUISITION_ELIGIBLE_SOURCE_STATUSES` defaults to
   `["open"]`. The function never fills defaults.
   Done-when: `test_eligibility.py::test_open_complete_eligible`, `test_eligibility.py::test_closed_not_eligible`, and `test_eligibility.py::test_missing_title_or_description_incomplete` pass.
-- [ ] BE-1.7 Run creation and ingestion services. `ScreeningRunService.create(principal,
+- [x] BE-1.7 Run creation and ingestion services. `ScreeningRunService.create(principal,
   external_requisition_id, correlation_id)` inserts a run in `created` and writes the
   `ScreeningRunCreated` audit event (actor = principal) in the same transaction.
   `IngestionService.ingest(run_id)` claims the run (a no-op if the claim is lost) and moves
@@ -228,7 +234,7 @@ endpoint, which keeps it inert in a running app.
   still snapshotted and pinned for traceability. Not-found, inaccessible, unavailable and
   malformed responses create no requisition or snapshot.
   Done-when: `test_ingestion.py` passes with one test per fixture outcome (open→`role_brief_draft`; closed, incomplete, not found, other-BU, unavailable and malformed→`blocked` with the D-07/D-09 reason code), plus `test_ingestion.py::test_every_transition_has_audit_event_in_same_transaction` and `test_ingestion.py::test_no_values_invented_for_missing_fields`.
-- [ ] BE-1.8 Alembic CLI DB-copy guard (**D-16 Accepted 2026-10-22 — build**; originally: build only if D-16 is
+- [x] BE-1.8 Alembic CLI DB-copy guard (**D-16 Accepted 2026-10-22 — build**; originally: build only if D-16 is
   accepted, otherwise strike it). Today the copy guard covers pytest only. `alembic/env.py`
   should apply the same `_copy`/`_test` rule whenever `ENVIRONMENT` is `development` or
   `test`. It refuses before connecting and prints the rejected database name. `staging`
@@ -237,9 +243,29 @@ endpoint, which keeps it inert in a running app.
   re-export so existing imports keep working (D-01). No migration and no new setting.
   Done-when: `tests/migrations/test_alembic_guard.py::test_alembic_refuses_non_copy_database_in_development` passes (it runs `command.current` with a non-copy URL and `ENVIRONMENT=development`, expects a refusal, and confirms no connection was opened), and `test_migration_round_trip` still passes.
 
-**Phase 1 Done-when:** in the Phase 1 worktree against the copy, the engineer reports
+- [x] **Phase 1 Done-when:** in the Phase 1 worktree against the copy, the engineer reports
 real output with every check passing: `ruff check`, `mypy app`, `pytest`, and `alembic
 upgrade head && alembic downgrade -1 && alembic upgrade head`.
+
+**Verified 2026-10-22 (MVP-light, D-18; solution-architect).** Code is in `backend/`
+(branch `claude/keen-mayer-npaib1` at `add315f`; worktree
+`/home/user/HR_phase1-worktrees/p1req-phase1` at `add315f` on
+`feature/p1-requisitions-phase1`). Light check per D-18: every Done-when test function
+exists under its exact name in the named file (Grep), and the orchestrator's run shows the
+suite passing. Assertions were not audited line by line.
+- `ruff check .`: All checks passed. `mypy app`: no issues in 38 source files.
+  `pytest -q`: 59 passed.
+- `alembic upgrade head; downgrade -1; upgrade head`: `0002_requisitions → 0001_audit_event
+  → 0002_requisitions`. `alembic current` ends at `0002_requisitions (head)`.
+- The BE-1.8 guard works from the CLI: with `ENVIRONMENT=development` and DB `hr_phase1`,
+  `alembic current` refused with "the name must end in _copy or _test (D-03)".
+- D-17 lockfiles are committed. There are no forward-migration drops and no tracked `.env`.
+- `test_ingestion.py` has one test per fixture outcome (open, closed, incomplete, not
+  found, other-BU, unavailable, malformed) plus the two named tests.
+- Engineer deviation: `screening_run.scope_business_units` and the related scope rules are
+  not covered by any accepted decision. They are written up as D-19 (Proposed). The ticks
+  stand because the column is additive and round-trips, but D-19 needs approval before
+  Phase 2 relies on it.
 
 **Reversibility:** Phase 1 adds no routes, so a running app behaves exactly as Phase 0.
 `alembic downgrade 0001_audit_event` removes the five tables. Audit rows written by tests
@@ -261,6 +287,11 @@ branch.
 ### Phase 2 — Screening-run API and background execution
 
 Goal: the acceptance criteria end to end over HTTP, behind `FEATURE_SCREENING_RUNS`.
+
+**Testing level (D-18, MVP-light):** each Done-when names one focused test per behaviour.
+Do not add exhaustive matrices or extra hardening tests. `ruff`, `mypy`, `pytest` and the
+migration round trip stay mandatory. **Precondition:** D-19 (run scope capture) must be
+approved before BE-2.3 and BE-2.4 rely on `scope_business_units`.
 
 - [ ] BE-2.1 Isolation setup (D-03). Create worktree
   `/home/user/HR_phase1-worktrees/p1req-phase2` on branch `feature/p1-requisitions-phase2`,
@@ -293,18 +324,19 @@ Goal: the acceptance criteria end to end over HTTP, behind `FEATURE_SCREENING_RU
   snapshot_id, payload_hash, captured_at}, or null), `started_at`, `completed_at` and
   `correlation_id`. It never includes the raw payload.
   Done-when: `test_api_screening_runs.py::test_get_returns_state_and_phase_status`, `test_api_screening_runs.py::test_get_other_business_unit_404`, and `test_api_screening_runs.py::test_get_without_permission_403` pass.
-- [ ] BE-2.5 End-to-end acceptance tests over HTTP (`RUN_EXECUTOR=inline`). Each test
-  POSTs, then GETs the run, for:
-  - `REQ-OPEN-1` → `role_brief_draft` with a pinned snapshot;
-  - `REQ-CLOSED-1` → `blocked/requisition_not_eligible_status`;
-  - `REQ-INCOMPLETE-1` → `blocked/requisition_incomplete` with
-    `status_details.missing_fields`;
-  - an unknown ID → `blocked/requisition_not_found`.
+- [ ] BE-2.5 End-to-end acceptance tests over HTTP (`RUN_EXECUTOR=inline`). Trimmed
+  2026-10-22 under D-18 (MVP-light): one focused test per behaviour, covering the happy
+  path and one blocked case.
+  - Happy path: POST `REQ-OPEN-1` → 202, the run reaches `role_brief_draft`, and GET shows
+    `role_brief_draft`.
+  - Blocked: POST `REQ-CLOSED-1` → 202, and GET shows
+    `blocked/requisition_not_eligible_status`.
+  - 401/403: covered by the BE-2.3 tests `test_post_without_principal_401` and
+    `test_post_without_permission_403`. They are not duplicated here.
 
-  Each test also checks the audit trail (event types in order, actor, timestamp, and a
-  correlation_id equal to the POST's `X-Correlation-ID`). A further test confirms the
-  routes return 404 when `FEATURE_SCREENING_RUNS=false`.
-  Done-when: `test_e2e_screening_runs.py` passes with `test_open_requisition_reaches_role_brief_draft`, `test_closed_missing_incomplete_are_blocked_with_reason`, `test_audit_trail_has_actor_timestamp_correlation`, and `test_feature_flag_off_hides_routes`.
+  Incomplete, not-found, other-BU, unavailable and malformed outcomes are already covered
+  at service level by `test_ingestion.py` (BE-1.7) and are not repeated over HTTP.
+  Done-when: `test_e2e_screening_runs.py::test_open_requisition_reaches_role_brief_draft` and `test_e2e_screening_runs.py::test_closed_requisition_is_blocked` pass, together with the BE-2.3 401/403 tests.
 - [ ] BE-2.6 Safe server access log (Tech Arch §6.2, §9; Phase 0 deviation e). Uvicorn's
   own access log prints query strings, but the app's request log does not. Add
   `--no-access-log` to the `uvicorn` command in `scripts/start-backend.sh`. The app's
@@ -335,6 +367,10 @@ recovered as `blocked/ingestion_interrupted` the next time the flag is enabled.
 - Rate limiting and request-size limits.
 - OpenAPI export and TypeScript type generation (no frontend in this feature).
 - A frontend status page (kickoff default is none).
+- Dropped from BE-2.5 under D-18 (MVP-light), to revisit before pilot/production: HTTP
+  end-to-end tests for incomplete and not-found requisitions, the HTTP-level audit-trail
+  test (actor, timestamp, correlation_id equal to the POST's `X-Correlation-ID`), and the
+  `FEATURE_SCREENING_RUNS=false` → 404 route test. The flag still defaults to off.
 
 ---
 
@@ -359,6 +395,8 @@ recovered as `blocked/ingestion_interrupted` the next time the flag is enabled.
 - **Q-2** Does the platform serve several business units? Which HR System field will
   carry the business unit? D-09 assumes `business_unit` exists in the payload. If there is
   a single BU, D-09 still works with one configured key.
+  **Still open in practice (2026-10-22, D-19):** the build requires `business_unit` in
+  the payload. If it is missing or is `*`, the run is blocked as `hr_response_invalid`.
 - **Q-3** Should a second POST for a requisition that already has an active run be
   allowed? The default is yes, with no idempotency key. The alternative is 409 or
   returning the existing run.

@@ -287,6 +287,65 @@ every feature unless a later decision names an exception and the reason for it.
   downgrade could break the route audit. Generating the lock adds files only, and
   deleting the lock reverts it.
 
+## D-18 MVP mode: light testing
+
+- **Status:** Accepted — user instruction, 2026-10-22
+- **Date:** 2026-10-22
+- **Feature:** Phase 1 — Requisitions (Phase 2 onward; applied retroactively to Phase 1 ticking)
+- **Decision:** The project is in MVP mode ("no need to lot of testing").
+  - Tests are limited to the ones named in Done-when lines: one focused test per
+    behaviour. Do not add exhaustive matrices, parametrized permutations or extra
+    hardening tests beyond what a Done-when names.
+  - Still mandatory for every phase: `ruff check`, `mypy app`, `pytest`, and the migration
+    round trip (`upgrade head → downgrade -1 → upgrade head`). They are cheap and they
+    enforce D-02.
+  - Ticking: the architect checks that each Done-when test exists under its exact name in
+    the named file and that the orchestrator's run shows it passing. Assertions are not
+    audited line by line.
+  - Standing rules D-01…D-04 are unchanged. Only the depth of verification changes.
+- **Reason:** User instruction. The cost of verification should match an MVP.
+- **Revisit:** before any pilot or production use. At that point, restore the trimmed
+  tests listed in the Phase 2 deferred list and re-audit assertions for security-relevant
+  tests (scoping, permissions, audit).
+
+## D-19 Run scope capture and business-unit rules (amends D-09, D-10)
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** Phase 1 — Requisitions (BE-1.2, BE-1.3, BE-1.7; engineer deviation found
+  during Phase 1 verification)
+- **Decision:** This amends D-09 and D-10 additively. It does not rewrite them.
+  - **New column (amends D-10):** `screening_run.scope_business_units`, `varchar[] NOT NULL
+    DEFAULT '{}'`, added in migration `0002_requisitions` and dropped by its downgrade.
+    `ScreeningRunService.create` fills it from the authenticated principal's
+    `business_units` at run creation. It is never taken from request input (D-04).
+  - **Ingestion scope (amends D-09):** ingestion runs without a live principal (in-process
+    or recovered runs), so the D-09 starter-scope check compares the HR payload's
+    `business_unit` against the run's captured `scope_business_units`. Scope is fixed when
+    the run is created. If a principal's units are revoked later, in-flight runs that
+    principal started are not affected.
+  - **Wildcard (clarifies D-09):** a principal granted `*` sees every run that has a
+    non-null `business_unit_key`. Unresolved runs (`business_unit_key IS NULL`) are still
+    visible only to their starter. At ingestion, a captured `*` accepts any business unit.
+  - **Payload business unit is required (clarifies D-07/D-09):** the HR payload must carry
+    `business_unit`. If it is missing, or if it is the literal `*`, the run is blocked with
+    `hr_response_invalid`. A source record can therefore never claim wildcard scope.
+- **Reason:** Without a captured scope, background ingestion has no principal to check
+  against. It would then either skip the D-09 check (failing open) or need the request
+  principal to outlive the request. Capturing the scope at creation keeps the check fail
+  closed and derived from the principal.
+- **Consequence:** Q-2 (which HR field carries the business unit, and whether there is
+  more than one BU) stays open in practice. The mock assumes `business_unit`. Until Q-2 is
+  answered, a real HR System without that field would block every run as
+  `hr_response_invalid`.
+- **Alternatives:** (a) Re-resolve the starter's current scope from the principal store at
+  ingestion time. That reflects revocations but needs a principal lookup with no request,
+  and there is none today. (b) Treat a missing `business_unit` as unscoped (NULL), which
+  fails open and is rejected under D-04.
+- **Reversibility:** the column is additive and is covered by the `0002` round trip.
+  Rejecting this decision means a follow-up task to change the scope source. The column
+  can stay unused (D-01).
+
 ---
 
 Never renumber existing IDs. New decisions are appended as D-05, D-06, …
