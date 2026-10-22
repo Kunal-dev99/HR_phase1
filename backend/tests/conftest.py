@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import pytest
@@ -25,6 +26,8 @@ from sqlalchemy.pool import NullPool
 from app.core.db import get_session
 from app.core.settings import Settings, get_settings
 from app.main import create_app
+from app.modules.integrations.adapters.hr_system.mock import MockHRSystemAdapter
+from app.modules.requisitions.service import InlineExecutor, build_ingestion_handler
 from tests.db_guard import UnsafeTestDatabaseError, assert_copy_database
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -111,3 +114,51 @@ async def client(app: FastAPI, db_session: AsyncSession) -> AsyncIterator[AsyncC
             yield c
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def screening_settings() -> Settings:
+    """Feature on, dev-header auth, mock HR System, inline executor (BE-2.3-2.5)."""
+    return Settings(  # type: ignore[call-arg]
+        _env_file=None,
+        ENVIRONMENT="test",
+        DATABASE_URL=database_url(),
+        AUTH_MODE="dev_header",
+        FEATURE_SCREENING_RUNS=True,
+        HR_SYSTEM_ADAPTER="mock",
+        RUN_EXECUTOR="inline",
+    )
+
+
+@pytest_asyncio.fixture
+async def screening_client(
+    screening_settings: Settings, db_session: AsyncSession
+) -> AsyncIterator[AsyncClient]:
+    """Client whose requests and inline ingestion share the rolled-back test session."""
+    app = create_app(screening_settings)
+
+    @asynccontextmanager
+    async def _scope() -> AsyncIterator[AsyncSession]:
+        yield db_session
+
+    async def _session_override() -> AsyncIterator[AsyncSession]:
+        yield db_session
+
+    app.state.run_executor = InlineExecutor(
+        build_ingestion_handler(screening_settings, MockHRSystemAdapter(), _scope)
+    )
+    app.dependency_overrides[get_session] = _session_override
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        yield c
+
+
+def dev_headers(
+    permissions: str = "screening_run:create,screening_run:read",
+    business_units: str = "bu-1",
+    principal_id: str = "recruiter-1",
+) -> dict[str, str]:
+    return {
+        "X-Dev-Principal-Id": principal_id,
+        "X-Dev-Permissions": permissions,
+        "X-Dev-Business-Units": business_units,
+    }

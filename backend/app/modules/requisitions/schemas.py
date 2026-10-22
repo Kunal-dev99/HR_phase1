@@ -91,3 +91,48 @@ class EligibilityResult(BaseModel):
     reason_code: CompletionReason | None
     missing_fields: tuple[str, ...]
     rules_version: str
+
+
+# --- Screening-run API (BE-2.3, BE-2.4, D-11) ---------------------------------------------
+
+
+class ScreeningRunCreateRequest(BaseModel):
+    """POST body: the HR System's requisition ID (not an internal UUID). Extra fields 422."""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    external_requisition_id: str = Field(min_length=1, max_length=c.EXTERNAL_REQUISITION_ID_MAX)
+
+
+class ScreeningRunAccepted(BaseModel):
+    run_id: uuid.UUID
+    status: RunStatus
+    status_url: str
+    correlation_id: str
+
+
+class RunPhases(BaseModel):
+    phase_1: str
+
+
+class RunRequisitionReference(BaseModel):
+    """A reference to the pinned snapshot. Never the raw payload (D-11)."""
+
+    external_requisition_id: str
+    hr_system_key: str
+    requisition_id: uuid.UUID
+    snapshot_id: uuid.UUID | None
+    payload_hash: str | None
+    captured_at: datetime | None
+
+
+class ScreeningRunStatusResponse(BaseModel):
+    run_id: uuid.UUID
+    status: RunStatus
+    phases: RunPhases
+    completion_reason: CompletionReason | None
+    status_details: dict[str, Any] | None
+    requisition: RunRequisitionReference | None
+    started_at: datetime
+    completed_at: datetime | None
+    correlation_id: str

@@ -30,6 +30,13 @@ class AuthMode(StrEnum):
     DEV_HEADER = "dev_header"
 
 
+class RunExecutorKind(StrEnum):
+    """How screening runs are executed after the request commits (D-06, BE-2.2)."""
+
+    IN_PROCESS = "in_process"
+    INLINE = "inline"
+
+
 MOCK_HR_SYSTEM_ADAPTER = "mock"
 
 # backend/.env, independent of the current working directory.
@@ -59,6 +66,10 @@ class Settings(BaseSettings):
     # HR System statuses that make a requisition eligible for screening (D-07, BE-1.6).
     # Set as JSON, e.g. REQUISITION_ELIGIBLE_SOURCE_STATUSES='["open"]'.
     REQUISITION_ELIGIBLE_SOURCE_STATUSES: tuple[str, ...] = ("open",)
+    # Background execution of screening runs (D-06, BE-2.2).
+    RUN_EXECUTOR: RunExecutorKind = RunExecutorKind.IN_PROCESS
+    # Startup recovery blocks runs left in ingesting_requisition longer than this.
+    INGESTION_STALE_AFTER_SECONDS: int = Field(default=600, gt=0)
 
     @model_validator(mode="after")
     def _fail_closed_in_production(self) -> Settings:
@@ -69,6 +80,8 @@ class Settings(BaseSettings):
 def unsafe_configuration_reasons(settings: Settings) -> list[str]:
     """Return every reason the configuration is unsafe for its environment."""
     reasons: list[str] = []
+    if settings.FEATURE_SCREENING_RUNS and not (settings.HR_SYSTEM_ADAPTER or "").strip():
+        reasons.append("FEATURE_SCREENING_RUNS=true requires HR_SYSTEM_ADAPTER to be set")
     if settings.ENVIRONMENT is Environment.PRODUCTION:
         if settings.AUTH_MODE is AuthMode.DEV_HEADER:
             reasons.append("AUTH_MODE=dev_header is not allowed when ENVIRONMENT=production")

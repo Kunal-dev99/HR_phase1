@@ -91,3 +91,15 @@ STATUS_MAX = 64
 STARTED_BY_MAX = 128
 CORRELATION_ID_MAX = 64
 COMPLETION_REASON_MAX = 64
+
+# Screening-run API (D-11). phases.phase_1 is derived from the run status.
+SCREENING_RUNS_PATH = "/screening-runs"
+PHASE_PENDING = "pending"
+PHASE_IN_PROGRESS = "in_progress"
+PHASE_BLOCKED = "blocked"
+PHASE_1_BY_STATUS: dict[RunStatus, str] = {
+    RunStatus.CREATED: PHASE_PENDING,
+    RunStatus.INGESTING_REQUISITION: PHASE_IN_PROGRESS,
+    RunStatus.ROLE_BRIEF_DRAFT: PHASE_IN_PROGRESS,
+    RunStatus.BLOCKED: PHASE_BLOCKED,
+}
