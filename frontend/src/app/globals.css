@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+/* D-20 design tokens: colour, spacing, radius, font sizes. */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+
+  --color-background: #f8fafc;
+  --color-surface: #ffffff;
+  --color-foreground: #0f172a;
+  --color-muted: #64748b;
+  --color-border: #e2e8f0;
+  --color-primary: #1d4ed8;
+  --color-primary-hover: #1e40af;
+  --color-primary-foreground: #ffffff;
+
+  --color-info-bg: #eff6ff;
+  --color-info-fg: #1e3a8a;
+  --color-success-bg: #f0fdf4;
+  --color-success-fg: #14532d;
+  --color-warning-bg: #fffbeb;
+  --color-warning-fg: #78350f;
+  --color-error-bg: #fef2f2;
+  --color-error-fg: #7f1d1d;
+
+  --spacing: 0.25rem;
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
