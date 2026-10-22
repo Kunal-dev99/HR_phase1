@@ -791,4 +791,24 @@ every feature unless a later decision names an exception and the reason for it.
 
 ---
 
+## D-40 PostgreSQL is the default database again (supersedes D-26 in part)
+
+- **Status:** Accepted — user instruction, 2026-10-22
+- **Date:** 2026-10-22
+- **Feature:** Cross-cutting (follows Phase 5, SQLite default database)
+- **Decision:** The user now has PostgreSQL set up locally, so PostgreSQL is the default
+  database for local development as well as pilot/production. `backend/.env.example`
+  defaults to `postgresql+asyncpg://<user>:<password>@localhost:5432/hr_phase1_dev_copy`
+  (placeholders make `backend-start.bat` stop on first run until they are filled in).
+  SQLite stays a supported alternative (the Phase 5 code, D-27…D-30, is unchanged). Only
+  the "SQLite is the default" part of D-26 is superseded.
+- **Reason:** User instruction. PostgreSQL is the production target (Tech Arch §2), and
+  PostgreSQL-only safeguards (audit immutability trigger, row-lock claim) then apply
+  locally too.
+- **Consequence:** the PostgreSQL path has not been re-verified since Phase 5 (deferred
+  under the user's scope cut, Q-21). With PostgreSQL as the default, running `pytest` and
+  the migration round trip on a PostgreSQL copy is now the meaningful check.
+
+---
+
 Never renumber existing IDs. New decisions are appended as D-05, D-06, …
