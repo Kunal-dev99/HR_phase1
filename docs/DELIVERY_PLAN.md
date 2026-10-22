@@ -48,14 +48,14 @@ Goal: a runnable FastAPI app with settings, async DB access, Alembic, a test har
 only accepts a DB copy, correlation IDs, the `audit_event` table, and a fail-closed
 principal/permission dependency. It contains no requisition logic.
 
-- [ ] BE-0.1 Isolation setup (D-03). Create git worktree
+- [x] BE-0.1 Isolation setup (D-03). Create git worktree
   `/home/user/HR_phase1-worktrees/p1req-phase0` on branch `feature/p1-requisitions-phase0`.
   Create an empty PostgreSQL database `hr_phase1_p1req_copy` for this phase. No live dev DB
   exists yet, so the "copy" is a dedicated new database, never a shared one. Record both
   in the engineer's report.
   Done-when: the report shows `git worktree list` output with the new path, and `psql -l`
   lists `hr_phase1_p1req_copy`.
-- [ ] BE-0.2 App skeleton and settings. Add `backend/pyproject.toml` (Python 3.12, FastAPI,
+- [x] BE-0.2 App skeleton and settings. Add `backend/pyproject.toml` (Python 3.12, FastAPI,
   SQLAlchemy 2 async + asyncpg, Alembic, pydantic-settings, pytest, pytest-asyncio, httpx,
   ruff, mypy). Add `backend/app/main.py` (app factory) and `backend/app/core/settings.py`
   with `ENVIRONMENT`, `DATABASE_URL`, `AUTH_MODE` (default `disabled`),
@@ -65,11 +65,11 @@ principal/permission dependency. It contains no requisition logic.
   public route and sits in an explicit `PUBLIC_ROUTES` allowlist. Layout follows
   **PROPOSED (D-13)**.
   Done-when: `test_settings.py::test_production_rejects_dev_auth_and_mock_adapter` passes, and `GET /healthz` returns 200 in `test_health.py::test_healthz_ok`.
-- [ ] BE-0.3 Async DB and Alembic. Add `backend/app/core/db.py` (async engine, session
+- [x] BE-0.3 Async DB and Alembic. Add `backend/app/core/db.py` (async engine, session
   dependency, one transaction per unit of work) and `backend/alembic/` with an async
   `env.py` that reads `DATABASE_URL` from settings. Add no tables yet.
   Done-when: `alembic current` against `hr_phase1_p1req_copy` runs without error (output in the report).
-- [ ] BE-0.4 Test harness and DB-copy guard. Add `backend/tests/conftest.py`. It refuses
+- [x] BE-0.4 Test harness and DB-copy guard. Add `backend/tests/conftest.py`. It refuses
   to run unless the database name in `DATABASE_URL` ends in `_copy` or `_test`. It
   migrates to head once per session, isolates each test in a rolled-back transaction, and
   provides an httpx `AsyncClient`. Add
@@ -77,19 +77,19 @@ principal/permission dependency. It contains no requisition logic.
   `upgrade head → downgrade base → upgrade head` on the copy. Every later migration task
   relies on this test.
   Done-when: `test_db_guard.py::test_refuses_non_copy_database` and `test_round_trip.py::test_migration_round_trip` pass.
-- [ ] BE-0.5 Correlation ID and safe logging. Middleware accepts `X-Correlation-ID` if it
+- [x] BE-0.5 Correlation ID and safe logging. Middleware accepts `X-Correlation-ID` if it
   is a UUID or `[A-Za-z0-9-]{1,64}`, otherwise it generates a UUID4. The ID is stored in a
   contextvar, echoed in the response header, and included in structured JSON logs. A log
   filter keeps request and response bodies out of logs (Tech Arch §6.2, §9).
   Done-when: `test_correlation.py::test_echoes_valid_and_replaces_invalid_correlation_id` passes.
-- [ ] BE-0.6 `audit` module and the `audit_event` table. Migration `0001_audit_event`
+- [x] BE-0.6 `audit` module and the `audit_event` table. Migration `0001_audit_event`
   creates the Data Model §4.18 columns plus a `details` JSONB field (nullable,
   non-PII). It adds the index `audit_event(screening_run_id, timestamp)` and a trigger
   that rejects UPDATE and DELETE (**PROPOSED (D-12)**). `screening_run_id` has no FK, by
   design (D-12). The repository is insert-only, and `AuditService.record(...)` joins the
   caller's transaction. `downgrade()` drops the trigger, the function and the table.
   Done-when: `test_audit.py::test_audit_event_is_append_only` (UPDATE and DELETE raise) and `test_migration_round_trip` pass.
-- [ ] BE-0.7 Principal and permission dependency. Add `backend/app/core/security.py`: a
+- [x] BE-0.7 Principal and permission dependency. Add `backend/app/core/security.py`: a
   `Principal` (id, permissions, business_units), a `PrincipalProvider` interface, a
   `DisabledPrincipalProvider` (the default, which always returns 401), a
   `DevHeaderPrincipalProvider` used only when `AUTH_MODE=dev_header`, and
@@ -98,9 +98,26 @@ principal/permission dependency. It contains no requisition logic.
   and fails when a route outside `PUBLIC_ROUTES` lacks a `require_permission` dependency.
   Done-when: `test_security.py::test_no_principal_401_missing_permission_403` and `test_security.py::test_every_route_declares_permission` pass.
 
-**Phase 0 Done-when:** in the Phase 0 worktree against `hr_phase1_p1req_copy`, the
+- [x] **Phase 0 Done-when:** in the Phase 0 worktree against `hr_phase1_p1req_copy`, the
 engineer reports real output with every check passing: `ruff check`, `mypy app`,
 `pytest`, and `alembic upgrade head && alembic downgrade -1 && alembic upgrade head`.
+
+**Verified 2026-10-22 (solution-architect).** Code read in `backend/` (fast-forwarded from
+`feature/p1-requisitions-phase0`, worktree `/home/user/HR_phase1-worktrees/p1req-phase0`
+at `b139e4e`). Every Done-when test exists under its exact name and asserts the stated
+behaviour, not a trivial pass. Orchestrator output from the worktree against
+`hr_phase1_p1req_copy`:
+- `ruff check .`: All checks passed. `mypy app`: no issues in 17 source files.
+- `pytest -q`: 26 passed. The 8 Done-when node IDs gave 15 passed, because
+  `test_refuses_non_copy_database` is parametrized 8 ways.
+- `alembic upgrade head; alembic downgrade base; alembic upgrade head; alembic current`
+  ended at `0001_audit_event (head)`. With a single revision, `downgrade base` is the same
+  as `downgrade -1`.
+- `git worktree list` shows the Phase 0 path. `psql -l` lists `hr_phase1_p1req_copy`.
+- No forward-migration drops, no deletions vs the base commit, no `.env` tracked (the root
+  `.gitignore` ignores `.env` and `.env.*`).
+- Engineer deviations a–f are logged as D-14…D-17 (Proposed). Follow-ups are BE-1.8,
+  BE-2.6 and the deferred items below.
 
 **Reversibility:** everything is new under `backend/`. To roll back, run `alembic
 downgrade base` on the copy and remove the worktree or revert the branch. Afterwards
@@ -113,6 +130,22 @@ destroy audit records.
 `audit_event` covers state transitions), secrets manager, metrics/tracing exporters, rate
 limiting and request-size limits (Tech Arch §6.2; no external exposure yet), CI pipeline
 definition.
+
+Also deferred from Phase 0 after verification (2026-10-22):
+- **Nullable `audit_event.screening_run_id`** for audit events that are not about a run
+  (admin, configuration). It is NOT NULL today, which matches Data Model §4.18 and every
+  event in this feature. Relaxing it belongs to the first feature that writes non-run
+  events, and that feature needs its own decision first. Its downgrade cannot restore NOT
+  NULL once null rows exist, and append-only rows cannot be deleted to make that possible.
+- **Dependency lockfile** (D-17, Proposed). There is no lockfile today, and versions are
+  ranges in `backend/pyproject.toml`. If D-17 is accepted, generate and commit the lock
+  before the Phase 1 build starts.
+- **Committed OpenAPI export** (D-14, Proposed). The docs and OpenAPI routes are not
+  mounted. An export script that writes `app.openapi()` to a file comes with the first
+  frontend feature, which matches the Phase 2 deferral of TypeScript type generation.
+- **Tests for the 32-key `details` limit and the startup route check.** Today
+  `test_details_must_be_small` covers only string length. Add these with D-15 if it is
+  accepted.
 
 ---
 
@@ -195,6 +228,14 @@ endpoint, which keeps it inert in a running app.
   still snapshotted and pinned for traceability. Not-found, inaccessible, unavailable and
   malformed responses create no requisition or snapshot.
   Done-when: `test_ingestion.py` passes with one test per fixture outcome (open→`role_brief_draft`; closed, incomplete, not found, other-BU, unavailable and malformed→`blocked` with the D-07/D-09 reason code), plus `test_ingestion.py::test_every_transition_has_audit_event_in_same_transaction` and `test_ingestion.py::test_no_values_invented_for_missing_fields`.
+- [ ] BE-1.8 Alembic CLI DB-copy guard (**PROPOSED (D-16)**; build only if D-16 is
+  accepted, otherwise strike it). Today the copy guard covers pytest only. `alembic/env.py`
+  should apply the same `_copy`/`_test` rule whenever `ENVIRONMENT` is `development` or
+  `test`. It refuses before connecting and prints the rejected database name. `staging`
+  and `production` are not affected. Move the guard from `tests/db_guard.py` to
+  `app/core/db_guard.py` so tests and Alembic share it, and keep `tests/db_guard.py` as a
+  re-export so existing imports keep working (D-01). No migration and no new setting.
+  Done-when: `tests/migrations/test_alembic_guard.py::test_alembic_refuses_non_copy_database_in_development` passes (it runs `command.current` with a non-copy URL and `ENVIRONMENT=development`, expects a refusal, and confirms no connection was opened), and `test_migration_round_trip` still passes.
 
 **Phase 1 Done-when:** in the Phase 1 worktree against the copy, the engineer reports
 real output with every check passing: `ruff check`, `mypy app`, `pytest`, and `alembic
@@ -264,6 +305,13 @@ Goal: the acceptance criteria end to end over HTTP, behind `FEATURE_SCREENING_RU
   correlation_id equal to the POST's `X-Correlation-ID`). A further test confirms the
   routes return 404 when `FEATURE_SCREENING_RUNS=false`.
   Done-when: `test_e2e_screening_runs.py` passes with `test_open_requisition_reaches_role_brief_draft`, `test_closed_missing_incomplete_are_blocked_with_reason`, `test_audit_trail_has_actor_timestamp_correlation`, and `test_feature_flag_off_hides_routes`.
+- [ ] BE-2.6 Safe server access log (Tech Arch §6.2, §9; Phase 0 deviation e). Uvicorn's
+  own access log prints query strings, but the app's request log does not. Add
+  `--no-access-log` to the `uvicorn` command in `scripts/start-backend.sh`. The app's
+  `app.request` JSON log, which records method, path, status, duration and correlation ID,
+  then becomes the only access log. This changes only one flag in the dev script, and
+  removing the flag reverts it.
+  Done-when: during the Phase 2 manual curl check, `GET /healthz?probe=secret-value` against `scripts/start-backend.sh` prints a JSON `app.request` line, and the console contains neither `secret-value` nor a uvicorn access-log line (console excerpt in the report).
 
 **Phase 2 Done-when:** in the Phase 2 worktree against the copy, the engineer reports
 real output with every check passing: `ruff check`, `mypy app`, `pytest`, and `alembic

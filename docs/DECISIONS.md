@@ -215,6 +215,78 @@ every feature unless a later decision names an exception and the reason for it.
 - **Reason:** The backend-engineer module shape allows no extra files without a decision
   entry. Adapters per provider are expected (Tech Arch §6.3).
 
+## D-14 Interactive docs and OpenAPI route are not mounted
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** Phase 1 — Requisitions (BE-0.2, BE-0.7; Phase 0 deviation a)
+- **Decision:** `create_app` sets `docs_url`, `redoc_url` and `openapi_url` to `None`, so
+  `/healthz` stays the only public route (D-08 `PUBLIC_ROUTES`). Code can still read the
+  schema through `app.openapi()`. If someone later wants served docs, they get a separate
+  decision with two options: mount them behind `require_permission("api_docs:read")`, or
+  only when `ENVIRONMENT` is not `production`. Any such route still has to pass the
+  route audit.
+- **Reason:** FastAPI's default `/docs`, `/redoc` and `/openapi.json` would be public
+  routes outside the allowlist. The startup route check (D-15) would reject them anyway.
+  Nothing in this feature needs served docs, and TypeScript type generation is deferred
+  (Phase 2 deferred list).
+- **Consequence:** Developers cannot browse `/docs` locally. A later export script writes
+  `app.openapi()` to a file (Phase 0 deferred list).
+
+## D-15 Audit and startup hardening beyond D-08 and D-12
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** Phase 1 — Requisitions (BE-0.6, BE-0.7; Phase 0 deviation c)
+- **Decision:** This extends D-12 and D-08. It does not rewrite them. The following,
+  already built in Phase 0, stay in place:
+  - A statement-level trigger on `audit_event` rejects TRUNCATE, in addition to the D-12
+    UPDATE and DELETE trigger. `downgrade()` drops both triggers.
+  - `create_app` refuses to start if any route outside `PUBLIC_ROUTES` lacks a
+    `require_permission` dependency. D-08 required only a test.
+  - `AuditService.record` raises `MissingCorrelationIdError` unless a correlation ID is
+    passed or set in the context.
+  - `details` holds at most 32 keys, and every key and string value is at most 256
+    characters.
+- **Reason:** These are all fail-closed additions in the spirit of D-04 and D-12.
+  TRUNCATE skips row triggers, so without its own trigger the append-only guarantee had a
+  hole. The details limits keep free text, which could be PII, out of audit rows.
+- **Consequence:** Work that runs outside a request, such as BE-2.2 startup recovery and
+  executor tasks, must pass the run's `correlation_id` explicitly (D-12 already requires
+  this). Test cleanup cannot TRUNCATE `audit_event`. It relies on rolled-back transactions
+  or on `downgrade base`.
+
+## D-16 Alembic CLI refuses non-copy databases in development and test
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** Phase 1 — Requisitions (BE-1.8; Phase 0 deviation d)
+- **Decision:** `alembic/env.py` applies the D-03 copy rule (database name ends in `_copy`
+  or `_test`) before it connects, whenever `ENVIRONMENT` is `development` or `test`.
+  Staging and production migrations are not affected. The guard moves to
+  `app/core/db_guard.py`, which adds a file to the D-13 `core/` list, and
+  `tests/db_guard.py` stays as a re-export.
+- **Reason:** Today only pytest is guarded. A manual `alembic downgrade base` with a wrong
+  `backend/.env` would destroy a non-copy database, including audit rows that are meant
+  to be permanent. D-03 says in-progress work never touches anything but a copy.
+- **Alternative:** Leave it as is and rely on `backend/.env` discipline, which has no code
+  change but also no protection.
+
+## D-17 Backend dependency locking
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** Phase 1 — Requisitions (Phase 0 deviation f)
+- **Decision:** Keep the compatible ranges in `backend/pyproject.toml`, and commit a
+  lockfile generated from them for reproducible installs into `backend/.venv`. The
+  default tool is `pip-compile` (pip-tools), producing `backend/requirements.lock` and
+  `backend/requirements-dev.lock`. The alternative is `uv lock`. Keep the floor
+  `fastapi>=0.159`, which `fastapi.routing.iter_route_contexts` (the route audit) needs.
+- **Reason:** Ranges alone let two installs of the same commit resolve different
+  versions. Because security code depends on a recent FastAPI API, an unnoticed upgrade or
+  downgrade could break the route audit. Generating the lock adds files only, and
+  deleting the lock reverts it.
+
 ---
 
 Never renumber existing IDs. New decisions are appended as D-05, D-06, …
