@@ -1,7 +1,13 @@
 import pytest
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
-from app.core.settings import AuthMode, Environment, Settings
+from app.core.settings import (
+    AuthMode,
+    Environment,
+    Settings,
+    UnsafeConfigurationError,
+    ensure_safe_configuration,
+)
 from app.main import create_app
 
 URL = "postgresql+asyncpg://u:p@localhost:5432/hr_phase1_p1req_copy"
@@ -43,3 +49,27 @@ def test_production_rejects_dev_auth_and_mock_adapter() -> None:
     )
     # Production with safe defaults starts.
     create_app(_settings(ENVIRONMENT="production"))
+
+
+def test_role_brief_requires_ai_provider_and_key() -> None:
+    def construct(**overrides: object) -> Settings:
+        base: dict[str, object] = {
+            "ENVIRONMENT": Environment.DEVELOPMENT,
+            "DATABASE_URL": URL,
+            "AUTH_MODE": AuthMode.DISABLED,
+            "FEATURE_SCREENING_RUNS": True,
+            "HR_SYSTEM_ADAPTER": "mock",
+            "FEATURE_ROLE_BRIEF": True,
+            "AI_PROVIDER": None,
+            "GROQ_API_KEY": None,
+        }
+        return Settings.model_construct(**{**base, **overrides})  # type: ignore[arg-type]
+
+    with pytest.raises(UnsafeConfigurationError, match="requires AI_PROVIDER"):
+        ensure_safe_configuration(construct())
+    with pytest.raises(UnsafeConfigurationError, match="requires GROQ_API_KEY"):
+        ensure_safe_configuration(construct(AI_PROVIDER="groq"))
+    with pytest.raises(UnsafeConfigurationError, match="requires GROQ_API_KEY"):
+        ensure_safe_configuration(construct(AI_PROVIDER="groq", GROQ_API_KEY=SecretStr(" ")))
+    # The mock provider is accepted outside production.
+    ensure_safe_configuration(construct(AI_PROVIDER="mock"))
