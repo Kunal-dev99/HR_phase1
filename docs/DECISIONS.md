@@ -310,7 +310,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-19 Run scope capture and business-unit rules (amends D-09, D-10)
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Phase 1 — Requisitions (BE-1.2, BE-1.3, BE-1.7; engineer deviation found
   during Phase 1 verification)

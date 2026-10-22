@@ -263,7 +263,7 @@ suite passing. Assertions were not audited line by line.
 - `test_ingestion.py` has one test per fixture outcome (open, closed, incomplete, not
   found, other-BU, unavailable, malformed) plus the two named tests.
 - Engineer deviation: `screening_run.scope_business_units` and the related scope rules are
-  not covered by any accepted decision. They are written up as D-19 (Proposed). The ticks
+  not covered by any accepted decision. They are written up as D-19 (Accepted 2026-10-22). The ticks
   stand because the column is additive and round-trips, but D-19 needs approval before
   Phase 2 relies on it.
 
@@ -290,7 +290,7 @@ Goal: the acceptance criteria end to end over HTTP, behind `FEATURE_SCREENING_RU
 
 **Testing level (D-18, MVP-light):** each Done-when names one focused test per behaviour.
 Do not add exhaustive matrices or extra hardening tests. `ruff`, `mypy`, `pytest` and the
-migration round trip stay mandatory. **Precondition:** D-19 (run scope capture) must be
+migration round trip stay mandatory. **Precondition (met 2026-10-22, D-19 Accepted):** D-19 (run scope capture) must be
 approved before BE-2.3 and BE-2.4 rely on `scope_business_units`.
 
 - [ ] BE-2.1 Isolation setup (D-03). Create worktree
