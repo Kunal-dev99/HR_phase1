@@ -1,0 +1,19 @@
+# Project memory (managed by PCS, local-only)
+.project-memory/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Node / Next.js
+node_modules/
+.next/
+
+# Python
+__pycache__/
+*.pyc
+backend/.venv/
+
+# Logs
+*.log
