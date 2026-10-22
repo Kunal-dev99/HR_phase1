@@ -182,6 +182,25 @@ class ScreeningRunRepository:
         )
         return result.one_or_none()
 
+    async def list_ids_in_status(self, status: RunStatus) -> list[uuid.UUID]:
+        """Unscoped, for startup recovery only (D-06). Oldest first."""
+        result = await self._session.scalars(
+            select(ScreeningRun.id)
+            .where(ScreeningRun.status == status.value)
+            .order_by(ScreeningRun.started_at)
+        )
+        return list(result.all())
+
+    async def list_stale_ids(self, status: RunStatus, older_than_seconds: int) -> list[uuid.UUID]:
+        """Unscoped, for startup recovery only: runs in ``status`` started too long ago."""
+        cutoff = func.clock_timestamp() - func.make_interval(0, 0, 0, 0, 0, 0, older_than_seconds)
+        result = await self._session.scalars(
+            select(ScreeningRun.id).where(
+                ScreeningRun.status == status.value, ScreeningRun.started_at < cutoff
+            )
+        )
+        return list(result.all())
+
     async def claim_for_ingestion(self, run_id: uuid.UUID) -> ScreeningRun | None:
         """Single-winner claim: ``UPDATE … WHERE status='created' RETURNING`` (D-06)."""
         return await self.transition(

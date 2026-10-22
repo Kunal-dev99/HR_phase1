@@ -6,18 +6,22 @@ repositories, and the HR System only through ``integrations`` services.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from collections.abc import Awaitable, Callable, Collection
-from typing import Any
+from contextlib import AbstractAsyncContextManager
+from typing import Any, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.correlation import is_valid_correlation_id
 from app.core.security import Principal
+from app.core.settings import RunExecutorKind, Settings
 from app.modules.audit.constants import ActorType
 from app.modules.audit.schemas import DetailValue
 from app.modules.audit.service import AuditService
+from app.modules.integrations.adapters.hr_system.base import HRSystemAdapter
 from app.modules.integrations.constants import AttemptOutcome
 from app.modules.integrations.schemas import HRRequisitionPayload
 from app.modules.integrations.service import HRFetchResult, HRSystemService
@@ -36,7 +40,10 @@ from app.modules.requisitions.repository import (
 from app.modules.requisitions.schemas import (
     EligibilityResult,
     RequisitionUpsert,
+    RunPhases,
+    RunRequisitionReference,
     ScreeningRunRead,
+    ScreeningRunStatusResponse,
     SnapshotCapture,
     SnapshotRead,
 )
@@ -141,11 +148,19 @@ class ScreeningRunService:
     """Creates runs. ``create`` joins the caller's unit of work and does not commit."""
 
     def __init__(
-        self, runs: ScreeningRunRepository, audit: AuditService, *, hr_system_key: str
+        self,
+        runs: ScreeningRunRepository,
+        audit: AuditService,
+        *,
+        hr_system_key: str,
+        snapshots: SnapshotRepository | None = None,
+        session: AsyncSession | None = None,
     ) -> None:
         self._runs = runs
         self._audit = audit
         self._hr_system_key = hr_system_key
+        self._snapshots = snapshots
+        self._session = session
 
     @classmethod
     def for_session(cls, session: AsyncSession, *, hr_system_key: str) -> ScreeningRunService:
@@ -153,6 +168,63 @@ class ScreeningRunService:
             ScreeningRunRepository(session),
             AuditService.for_session(session),
             hr_system_key=hr_system_key,
+            snapshots=SnapshotRepository(session),
+            session=session,
+        )
+
+    async def start(
+        self,
+        principal: Principal,
+        external_requisition_id: str,
+        correlation_id: str,
+        executor: RunExecutor,
+    ) -> ScreeningRunRead:
+        """Create the run, commit, and only then dispatch it (BE-2.2, D-06).
+
+        The executor never sees a run whose creation could still roll back.
+        """
+        if self._session is None:
+            raise RuntimeError("start() needs a session-bound service (use for_session)")
+        run = await self.create(principal, external_requisition_id, correlation_id)
+        await self._session.commit()
+        await executor.dispatch(run.id)
+        return run
+
+    async def get_status(
+        self, principal: Principal, run_id: uuid.UUID
+    ) -> ScreeningRunStatusResponse | None:
+        """Scoped read (D-09): ``None`` when the run is missing or out of scope."""
+        if not principal.has_permission(c.PERMISSION_SCREENING_RUN_READ):
+            raise PermissionDeniedError(c.PERMISSION_SCREENING_RUN_READ)
+        run = await self._runs.get_for_principal(run_id, principal)
+        if run is None:
+            return None
+        status = RunStatus(run.status)
+        requisition: RunRequisitionReference | None = None
+        if run.requisition_id is not None:
+            snapshot = None
+            if run.requisition_snapshot_id is not None and self._snapshots is not None:
+                snapshot = await self._snapshots.get(run.requisition_snapshot_id)
+            requisition = RunRequisitionReference(
+                external_requisition_id=run.external_requisition_id,
+                hr_system_key=run.hr_system_key,
+                requisition_id=run.requisition_id,
+                snapshot_id=run.requisition_snapshot_id,
+                payload_hash=snapshot.payload_hash if snapshot else None,
+                captured_at=snapshot.captured_at if snapshot else None,
+            )
+        return ScreeningRunStatusResponse(
+            run_id=run.id,
+            status=status,
+            phases=RunPhases(phase_1=c.PHASE_1_BY_STATUS.get(status, c.PHASE_IN_PROGRESS)),
+            completion_reason=(
+                CompletionReason(run.completion_reason) if run.completion_reason else None
+            ),
+            status_details=run.status_details,
+            requisition=requisition,
+            started_at=run.started_at,
+            completed_at=run.completed_at,
+            correlation_id=run.correlation_id,
         )
 
     async def create(
@@ -437,3 +509,135 @@ class IngestionService:
             reason_code=reason_code,
             details=details,
         )
+
+
+# --- Run execution and startup recovery (BE-2.2, D-06) ------------------------------------
+
+SessionScope = Callable[[], AbstractAsyncContextManager[AsyncSession]]
+RunHandler = Callable[[uuid.UUID], Awaitable[None]]
+
+
+class RunExecutor(Protocol):
+    async def dispatch(self, run_id: uuid.UUID) -> None:
+        """Start executing a committed run. Call only after the creating commit."""
+        ...
+
+    async def shutdown(self) -> None:
+        """Wait for in-flight work to finish."""
+        ...
+
+
+class InlineExecutor:
+    """Runs the handler to completion inside ``dispatch``. For tests (RUN_EXECUTOR=inline)."""
+
+    def __init__(self, handler: RunHandler) -> None:
+        self._handler = handler
+
+    async def dispatch(self, run_id: uuid.UUID) -> None:
+        await self._handler(run_id)
+
+    async def shutdown(self) -> None:
+        return None
+
+
+class InProcessExecutor:
+    """One asyncio task per run, each with its own DB session. Tasks are awaited on shutdown."""
+
+    def __init__(self, handler: RunHandler) -> None:
+        self._handler = handler
+        self._tasks: set[asyncio.Task[None]] = set()
+
+    async def _run(self, run_id: uuid.UUID) -> None:
+        try:
+            await self._handler(run_id)
+        except Exception:
+            # The run stays in its last committed state; startup recovery handles it.
+            logger.exception(
+                "screening run execution failed",
+                extra={"event": "run_execution_failed", "screening_run_id": str(run_id)},
+            )
+
+    async def dispatch(self, run_id: uuid.UUID) -> None:
+        task = asyncio.create_task(self._run(run_id), name=f"screening-run-{run_id}")
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    async def shutdown(self) -> None:
+        if self._tasks:
+            await asyncio.gather(*list(self._tasks), return_exceptions=True)
+
+
+def build_ingestion_handler(
+    settings: Settings, adapter: HRSystemAdapter, session_scope: SessionScope
+) -> RunHandler:
+    """Each dispatched run is ingested in its own session from ``session_scope``."""
+
+    async def _ingest(run_id: uuid.UUID) -> None:
+        async with session_scope() as session:
+            hr = HRSystemService.for_session(
+                session, adapter, timeout_seconds=settings.HR_SYSTEM_TIMEOUT_SECONDS
+            )
+            ingestion = IngestionService(
+                session, hr, eligible_statuses=settings.REQUISITION_ELIGIBLE_SOURCE_STATUSES
+            )
+            await ingestion.ingest(run_id)
+
+    return _ingest
+
+
+def build_run_executor(settings: Settings, handler: RunHandler) -> RunExecutor:
+    if settings.RUN_EXECUTOR is RunExecutorKind.INLINE:
+        return InlineExecutor(handler)
+    return InProcessExecutor(handler)
+
+
+class RunRecoveryService:
+    """Startup recovery (D-06): block stale ingesting runs, redispatch created ones."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self._runs = ScreeningRunRepository(session)
+        self._audit = AuditService.for_session(session)
+
+    async def recover(
+        self, executor: RunExecutor, *, stale_after_seconds: int
+    ) -> tuple[list[uuid.UUID], list[uuid.UUID]]:
+        """Return ``(redispatched, blocked)`` run IDs."""
+        blocked: list[uuid.UUID] = []
+        try:
+            stale = await self._runs.list_stale_ids(
+                RunStatus.INGESTING_REQUISITION, stale_after_seconds
+            )
+            for run_id in stale:
+                run = await self._runs.transition(
+                    run_id,
+                    expected_status=RunStatus.INGESTING_REQUISITION,
+                    new_status=RunStatus.BLOCKED,
+                    completion_reason=CompletionReason.INGESTION_INTERRUPTED.value,
+                    completed=True,
+                )
+                if run is None:
+                    continue  # moved on meanwhile
+                await self._audit.record(
+                    screening_run_id=run.id,
+                    entity_type=c.ENTITY_SCREENING_RUN,
+                    entity_id=str(run.id),
+                    event_type=events.RUN_STATUS_CHANGED,
+                    actor_type=ActorType.SYSTEM,
+                    actor_id=c.INGESTION_ACTOR_ID,
+                    correlation_id=run.correlation_id,
+                    reason_code=CompletionReason.INGESTION_INTERRUPTED,
+                    details={
+                        "from_status": RunStatus.INGESTING_REQUISITION.value,
+                        "to_status": RunStatus.BLOCKED.value,
+                    },
+                )
+                blocked.append(run.id)
+            created = await self._runs.list_ids_in_status(RunStatus.CREATED)
+        except BaseException:
+            await self._session.rollback()
+            raise
+        await self._session.commit()  # dispatch only what is committed
+        for run_id in created:
+            await executor.dispatch(run_id)
+        return created, blocked

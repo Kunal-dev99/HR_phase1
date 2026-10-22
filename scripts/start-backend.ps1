@@ -18,4 +18,4 @@ foreach ($p in $pids) {
 
 Set-Location $backend
 & (Join-Path $backend ".venv\Scripts\Activate.ps1")
-uvicorn app.main:app --reload --port $Port
+uvicorn app.main:app --reload --no-access-log --port $Port

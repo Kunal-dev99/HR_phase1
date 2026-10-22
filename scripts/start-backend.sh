@@ -12,4 +12,4 @@ fi
 cd "$ROOT/backend"
 # shellcheck disable=SC1091
 source .venv/bin/activate
-exec uvicorn app.main:app --reload --port "$PORT"
+exec uvicorn app.main:app --reload --no-access-log --port "$PORT"

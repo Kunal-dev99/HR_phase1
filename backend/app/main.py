@@ -10,12 +10,21 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.correlation import CorrelationIdMiddleware
-from app.core.db import dispose_engine
+from app.core.db import dispose_engine, get_sessionmaker
 from app.core.logging import configure_logging
 from app.core.security import build_principal_provider, ensure_routes_protected
 from app.core.settings import Settings, ensure_safe_configuration, get_settings
+from app.modules.integrations.service import build_hr_system_adapter
+from app.modules.requisitions.router import router as screening_runs_router
+from app.modules.requisitions.service import (
+    RunExecutor,
+    RunRecoveryService,
+    build_ingestion_handler,
+    build_run_executor,
+)
 
 API_V1_PREFIX = "/api/v1"
 
@@ -29,9 +38,23 @@ async def healthz() -> dict[str, str]:
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    settings: Settings = app.state.settings
+    executor: RunExecutor | None = getattr(app.state, "run_executor", None)
+    if settings.FEATURE_SCREENING_RUNS and executor is not None:
+        # Startup recovery (D-06): only when the feature is on.
+        async with get_sessionmaker()() as session:
+            await RunRecoveryService(session).recover(
+                executor, stale_after_seconds=settings.INGESTION_STALE_AFTER_SECONDS
+            )
     yield
+    if executor is not None:
+        await executor.shutdown()
     await dispose_engine()
+
+
+def _session_scope() -> AsyncSession:
+    return get_sessionmaker()()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -54,8 +77,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.principal_provider = build_principal_provider(settings)
     app.add_middleware(CorrelationIdMiddleware)
     app.include_router(health_router)
-    # Feature routers are mounted here; screening-run routes only when
-    # settings.FEATURE_SCREENING_RUNS is true (D-11, Phase 2).
+    # Screening-run routes and execution exist only when the feature is on (D-11, D-02).
+    if settings.FEATURE_SCREENING_RUNS:
+        adapter = build_hr_system_adapter(settings)  # unset or unknown adapter: refuse
+        app.state.hr_system_key = adapter.hr_system_key
+        app.state.run_executor = build_run_executor(
+            settings, build_ingestion_handler(settings, adapter, _session_scope)
+        )
+        app.include_router(screening_runs_router, prefix=API_V1_PREFIX)
 
     # Fail closed (D-04): refuse to start if any non-public route lacks a permission.
     ensure_routes_protected(app)

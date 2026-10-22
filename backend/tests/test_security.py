@@ -90,11 +90,24 @@ async def test_missing_provider_fails_closed() -> None:
 def test_every_route_declares_permission() -> None:
     assert frozenset({"/healthz"}) == PUBLIC_ROUTES
 
-    for overrides in ({}, {"AUTH_MODE": "dev_header", "FEATURE_SCREENING_RUNS": True}):
+    flag_on = {
+        "AUTH_MODE": "dev_header",
+        "FEATURE_SCREENING_RUNS": True,
+        "HR_SYSTEM_ADAPTER": "mock",
+    }
+    expected_paths = {
+        "{}": {"/healthz"},  # flag off: no feature routes (D-11)
+        str(flag_on): {
+            "/healthz",
+            "/api/v1/screening-runs",
+            "/api/v1/screening-runs/{run_id}",
+        },
+    }
+    for overrides in ({}, flag_on):
         settings = Settings(_env_file=None, DATABASE_URL=URL, **overrides)  # type: ignore[arg-type]
         app = create_app(settings)
         paths = {route.path for route in iter_route_contexts(app.routes)}
-        assert paths == {"/healthz"}  # Phase 0 mounts no feature routes
+        assert paths == expected_paths[str(overrides)]
         assert find_unprotected_routes(app) == [], overrides
 
     # The audit catches an unprotected route, a router-level permission counts as declared,
