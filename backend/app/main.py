@@ -6,10 +6,15 @@ Tests build their own instance with ``create_app(settings)``.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import APIRouter, FastAPI
 
 from app.core.correlation import CorrelationIdMiddleware
+from app.core.db import dispose_engine
 from app.core.logging import configure_logging
+from app.core.security import build_principal_provider, ensure_routes_protected
 from app.core.settings import Settings, ensure_safe_configuration, get_settings
 
 API_V1_PREFIX = "/api/v1"
@@ -21,6 +26,12 @@ health_router = APIRouter(tags=["health"])
 async def healthz() -> dict[str, str]:
     """Liveness probe. Public by design: listed in ``PUBLIC_ROUTES``."""
     return {"status": "ok"}
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    yield
+    await dispose_engine()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -36,11 +47,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
+        lifespan=lifespan,
     )
     configure_logging()
     app.state.settings = settings
+    app.state.principal_provider = build_principal_provider(settings)
     app.add_middleware(CorrelationIdMiddleware)
     app.include_router(health_router)
+    # Feature routers are mounted here; screening-run routes only when
+    # settings.FEATURE_SCREENING_RUNS is true (D-11, Phase 2).
+
+    # Fail closed (D-04): refuse to start if any non-public route lacks a permission.
+    ensure_routes_protected(app)
     return app
 
 
