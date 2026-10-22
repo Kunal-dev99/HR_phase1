@@ -127,3 +127,23 @@ def test_every_route_declares_permission() -> None:
 def test_permission_names_are_validated() -> None:
     with pytest.raises(ValueError, match="<resource>:<action>"):
         require_permission("admin")
+
+
+def test_create_app_refuses_unprotected_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-15: the factory itself refuses to start, not only the route-audit test."""
+    import app.main as main
+
+    leaky = APIRouter()
+
+    @leaky.get("/healthz")
+    async def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @leaky.get("/api/v1/leak")
+    async def leak() -> dict[str, str]:
+        return {}
+
+    monkeypatch.setattr(main, "health_router", leaky)
+    settings = Settings(_env_file=None, DATABASE_URL=URL)  # type: ignore[call-arg]
+    with pytest.raises(RuntimeError, match=r"GET /api/v1/leak"):
+        create_app(settings)

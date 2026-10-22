@@ -118,3 +118,29 @@ async def test_details_must_be_small(db_session: AsyncSession) -> None:
             correlation_id="c-1",
             details={"cv_text": "x" * 1000},
         )
+
+
+async def test_details_key_count_and_key_length_limits(db_session: AsyncSession) -> None:
+    """D-15: at most 32 keys, and keys/strings (including list items) at most 256 chars."""
+    service = AuditService.for_session(db_session)
+
+    async def record(details: dict[str, object]) -> None:
+        await service.record(
+            screening_run_id=uuid.uuid4(),
+            entity_type="screening_run",
+            entity_id="x",
+            event_type="RunStatusChanged",
+            actor_type=ActorType.SYSTEM,
+            correlation_id="c-1",
+            details=details,  # type: ignore[arg-type]
+        )
+
+    await record({f"k{i}": i for i in range(32)})  # exactly at the limit
+    await record({"k" * 256: "v" * 256, "items": ["x" * 256]})
+    for too_much in (
+        {f"k{i}": i for i in range(33)},
+        {"k" * 257: 1},
+        {"items": ["ok", "x" * 257]},
+    ):
+        with pytest.raises(ValidationError):
+            await record(too_much)
