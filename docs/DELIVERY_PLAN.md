@@ -451,6 +451,9 @@ recovered as `blocked/ingestion_interrupted` the next time the flag is enabled.
   D-21…D-25 are "Proposed — awaiting approval". The defaults below make the plan buildable.
   If approval changes a default, I amend the affected tasks before the build starts.
 - **Plan author:** solution-architect, 2026-10-22
+- **Delivery status:** COMPLETE for local dev (2026-10-22, merged at `e21aa1f`). Hosting is
+  deferred (D-20).
+  Q-12 (the Windows `.ps1` check) is still pending with the user.
 - **Specs and decisions used:** Technical Architecture §2 (frontend: React + TypeScript),
   §4.1, §6.1–6.2, §9. D-08 (dev principal headers), D-11 (API contract and flag), D-14
   (no served OpenAPI), D-18 (MVP-light testing), D-20…D-25.
@@ -604,16 +607,16 @@ Goal: the kickoff acceptance in a browser. (1) Start a run from an HR requisitio
 **Precondition:** Requisitions Phase 2 (BE-2.1…BE-2.6) is verified, ticked and merged
 into the integration branch, and Phase 3 is reviewed.
 
-- [ ] FE-4.1 Isolation setup (D-03). Create worktree
+- [x] FE-4.1 Isolation setup (D-03). Create worktree
   `/home/user/HR_phase1-worktrees/mvp-ui-phase4` on branch `feature/mvp-ui-phase4`, based
   on the integration branch with Phase 3 and Requisitions Phase 2 merged. Migrate
   `hr_phase1_mvpui_copy` to head.
   Done-when: the report shows `git worktree list` with the Phase 4 path, and `alembic current` on `hr_phase1_mvpui_copy` shows `0002_requisitions (head)`.
-- [ ] BE-4.1 Re-export the OpenAPI schema with the Phase 2 routes. Run
+- [x] BE-4.1 Re-export the OpenAPI schema with the Phase 2 routes. Run
   `backend/scripts/export_openapi.py` and commit `backend/openapi.json`. There is no code
   change.
   Done-when: Grep shows `/api/v1/screening-runs` and `/api/v1/screening-runs/{run_id}` under `paths` in `backend/openapi.json`.
-- [ ] FE-4.2 Screening-run API functions. Run `npm run gen:api`. Add
+- [x] FE-4.2 Screening-run API functions. Run `npm run gen:api`. Add
   `src/api/screening-runs.ts` with `createScreeningRun(externalRequisitionId)` and
   `getScreeningRun(runId)`, typed only from `src/api/schema.d.ts`. Add
   `src/api/messages.ts`, which maps responses to user messages:
@@ -626,13 +629,13 @@ into the integration branch, and Phase 3 is reviewed.
 
   The `completion_reason` labels cover the D-07 codes, and an unknown code is shown raw.
   Done-when: `npm run typecheck` passes and Grep finds no hand-written screening-run request/response type (`type|interface .*ScreeningRun`) under `frontend/src` outside `src/api/schema.d.ts`.
-- [ ] FE-4.3 Start-run page at `/` (behind `NEXT_PUBLIC_FEATURE_SCREENING_RUNS`; when it
+- [x] FE-4.3 Start-run page at `/` (behind `NEXT_PUBLIC_FEATURE_SCREENING_RUNS`; when it
   is `false`, the page shows an info `Alert` "Screening runs are turned off"). The page
   has one `TextField` (HR requisition ID, required, no client-side length cap so the
   server's 422 is shown) and a `Button` that is disabled while submitting. On 202 it
   navigates to `/screening-runs/<run_id>`. Errors appear in an `Alert` from FE-4.2.
   Done-when: manual check against the Phase 4 backend: "Recruiter bu-1" + `REQ-OPEN-1` lands on `/screening-runs/<run_id>`; "No principal" shows the 401 message; "Viewer bu-1" shows the 403 message; a 129-character ID shows the server's 422 message.
-- [ ] FE-4.4 Run status page `/screening-runs/[runId]` (same flag). It shows:
+- [x] FE-4.4 Run status page `/screening-runs/[runId]` (same flag). It shows:
   - a `StatusBadge` for `status` and one for `phases.phase_1`;
   - the `completion_reason` label and `status_details.missing_fields` when present;
   - the pinned requisition (`external_requisition_id`, `hr_system_key`, `requisition_id`,
@@ -644,7 +647,7 @@ into the integration branch, and Phase 3 is reviewed.
   snapshot payload is never requested or shown.
   Done-when: manual check: a `REQ-OPEN-1` run shows `role_brief_draft`, phase 1 `in_progress` and the pinned requisition, and the backend `app.request` log shows no further GETs for that run after the status is reached; a `REQ-CLOSED-1` run shows `blocked` with the `requisition_not_eligible_status` label; the same `REQ-OPEN-1` URL opened with "Recruiter bu-other" shows the not-found message.
 
-- [ ] **Phase 4 Done-when:** in the Phase 4 worktree, `npm run build`, `npm run lint` and
+- [x] **Phase 4 Done-when:** in the Phase 4 worktree, `npm run build`, `npm run lint` and
   `npm run typecheck` pass. Backend `ruff check .`, `mypy app` and `pytest` pass. One
   manual walkthrough covers acceptance (1)–(3), and the report includes screenshots or a
   console excerpt. The backend is started with `scripts/start-backend.sh` from the
@@ -652,6 +655,45 @@ into the integration branch, and Phase 3 is reviewed.
   `HR_SYSTEM_ADAPTER=mock`, DB `hr_phase1_mvpui_copy`). The frontend is started with
   `scripts/start-frontend.sh` (`NEXT_PUBLIC_DEV_AUTH=true`,
   `NEXT_PUBLIC_FEATURE_SCREENING_RUNS=true`).
+
+**Verified 2026-10-22 (MVP-light, D-18; solution-architect).** Merged at `e21aa1f`. Files
+confirmed by Glob/Grep: `frontend/src/api/screening-runs.ts` (`createScreeningRun`,
+`getScreeningRun`); `frontend/src/api/messages.ts` (401, POST-404, not-found and
+backend-unavailable messages); `frontend/src/features.ts`
+(`NEXT_PUBLIC_FEATURE_SCREENING_RUNS`); `frontend/src/app/page.tsx` (the start form);
+`frontend/src/app/screening-runs/[runId]/page.tsx` and `RunStatusView.tsx`. Grep finds no
+`(type|interface) .*ScreeningRun` under `frontend/src` outside `schema.d.ts`, and no
+`dangerouslySetInnerHTML`. `backend/openapi.json` has `/api/v1/screening-runs` and
+`/api/v1/screening-runs/{run_id}`. Reported output: the orchestrator ran `npm run build`,
+`lint` and `typecheck` (exit 0), ruff ("All checks passed!") and pytest ("70 passed in 3.50s")
+in the Phase 4 worktree. The engineer reported `alembic current` 0002_requisitions (head) on
+`hr_phase1_mvpui_copy`, and no diff after re-running `export_openapi` or `gen:api`. The
+engineer also ran a Playwright walkthrough with the Phase 4 Done-when settings, with seven
+screenshots in the session scratchpad:
+- `REQ-OPEN-1` reached `/screening-runs/<id>` with `role_brief_draft`, phase_1 `in_progress`
+  and the pinned requisition. The backend log showed no further GETs for that run in the 10 s
+  after.
+- `REQ-CLOSED-1` showed blocked, "Requisition is not in an eligible status".
+- No principal showed the 401 message.
+- Viewer bu-1 showed "You do not have permission (screening_run:create)."
+- A 129-character ID showed "String should have at most 128 characters".
+- Recruiter bu-other on the open run URL showed "Run not found, or you cannot see it."
+
+The orchestrator also reported, from `/home/user/HR_phase1-worktrees/mvp-ui-phase4/backend`:
+`mypy app` gave "Success: no issues found in 38 source files", and `git worktree list` gave
+"/home/user/HR_phase1-worktrees/mvp-ui-phase4  e21aa1f [feature/mvp-ui-phase4]".
+Deviations:
+- The 403 message uses the route's declared permission, because the backend 403 body is only
+  "Forbidden".
+- The run page is split into a server `page.tsx` and a client `RunStatusView.tsx` inside
+  Suspense (Next 16 Cache Components).
+- Dev StrictMode doubles the first GET. This happens in dev only.
+- A 422 on GET stops polling.
+- Unknown statuses show "Request failed (HTTP n)".
+- Extra runs from dry runs remain in the copy DB. They are never deleted, by design.
+
+**Feature status (MVP UI — screening runs): COMPLETE for local dev, 2026-10-22.** Hosting is deferred (D-20, local dev
+only). Q-12 (the Windows `start-frontend.ps1` check) is still pending with the user.
 
 **Reversibility:** `NEXT_PUBLIC_FEATURE_SCREENING_RUNS=false` (the default) turns the
 screens into an "off" notice. Backend `FEATURE_SCREENING_RUNS=false` unmounts the API, and
