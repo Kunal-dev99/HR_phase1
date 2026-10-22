@@ -368,7 +368,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-21 Dev-only principal picker in the UI
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** MVP UI (FE-3.5)
 - **Decision:** While the backend only offers `AUTH_MODE=dev_header` (D-08), the UI gets
@@ -389,7 +389,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-22 Browser-to-API path: same-origin Next.js rewrite
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** MVP UI (FE-3.4)
 - **Decision:** The browser calls same-origin `/api/v1/*` (and `/healthz`). `next.config.ts`
@@ -403,7 +403,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-23 OpenAPI export script and generated API types (extends D-13, D-14)
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** MVP UI (BE-3.1, BE-4.1, FE-3.4, FE-4.2)
 - **Decision:** D-14 is unchanged, and no OpenAPI or docs route is mounted. A
@@ -421,7 +421,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-24 Run status polling
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** MVP UI (FE-4.4)
 - **Decision:**
@@ -440,7 +440,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-25 Frontend location, start scripts and UI feature flag
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** MVP UI (FE-3.2, FE-4.3, FE-4.4)
 - **Decision:** The app lives in `frontend/` at the repo root, with code under

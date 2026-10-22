@@ -447,7 +447,7 @@ recovered as `blocked/ingestion_interrupted` the next time the flag is enabled.
 ## Feature: MVP UI — screening runs
 
 - **Kickoff:** `docs/prompts/kickoffs/2026-10-22-mvp-ui.md`
-- **Plan status:** PROPOSED — awaiting approval. D-20 is Accepted (user decisions).
+- **Plan status:** APPROVED by the user, 2026-10-22 — all defaults accepted; D-21…D-25 Accepted. D-20 is Accepted (user decisions).
   D-21…D-25 are "Proposed — awaiting approval". The defaults below make the plan buildable.
   If approval changes a default, I amend the affected tasks before the build starts.
 - **Plan author:** solution-architect, 2026-10-22
@@ -660,6 +660,8 @@ Reverting the branch removes the pages and leaves the Phase 3 foundation.
 ### Open questions for approval (MVP UI)
 
 Numbered from Q-10 so they do not collide with the Requisitions Q-1…Q-9.
+
+**Resolved 2026-10-22:** the user approved all defaults (Q-10…Q-14); D-21…D-25 Accepted. Q-11: Node 22 and npm 10 are present in the cloud build container; confirm separately for local machines. Q-12 (Windows run of `start-frontend.ps1`) stays a manual check for the user.
 
 - **Q-10** Approve or amend D-21…D-25 (defaults above).
 - **Q-11** Toolchain on local machines: Node ≥ 20 LTS and npm (the start scripts already
