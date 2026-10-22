@@ -68,8 +68,6 @@ class Settings(BaseSettings):
     REQUISITION_ELIGIBLE_SOURCE_STATUSES: tuple[str, ...] = ("open",)
     # Background execution of screening runs (D-06, BE-2.2).
     RUN_EXECUTOR: RunExecutorKind = RunExecutorKind.IN_PROCESS
-    # Startup recovery blocks runs left in ingesting_requisition longer than this.
-    INGESTION_STALE_AFTER_SECONDS: int = Field(default=600, gt=0)
 
     @model_validator(mode="after")
     def _fail_closed_in_production(self) -> Settings:

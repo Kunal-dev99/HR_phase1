@@ -44,9 +44,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if settings.FEATURE_SCREENING_RUNS and executor is not None:
         # Startup recovery (D-06): only when the feature is on.
         async with get_sessionmaker()() as session:
-            await RunRecoveryService(session).recover(
-                executor, stale_after_seconds=settings.INGESTION_STALE_AFTER_SECONDS
-            )
+            await RunRecoveryService(session).recover(executor)
     yield
     if executor is not None:
         await executor.shutdown()

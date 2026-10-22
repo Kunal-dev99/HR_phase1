@@ -70,37 +70,55 @@ async def test_dispatch_after_commit_only(
     assert log == []
 
 
-@pytest.mark.pg_only
 async def test_startup_recovery_redispatches_created_and_blocks_stale(
     db_session: AsyncSession,
 ) -> None:
     service = _service(db_session)
     created = await service.create(STARTER, "REQ-OPEN-1", "corr-rec-1")
-    stale = await service.create(STARTER, "REQ-OPEN-1", "corr-rec-2")
+    interrupted = await service.create(STARTER, "REQ-OPEN-1", "corr-rec-2")
     await db_session.commit()
     runs = ScreeningRunRepository(db_session)
-    assert await runs.claim_for_ingestion(stale.id) is not None
-    await db_session.execute(
-        text("UPDATE screening_run SET started_at = now() - interval '1 hour' WHERE id = :id"),
-        {"id": stale.id},
-    )
+    assert await runs.claim_for_ingestion(interrupted.id) is not None
     await db_session.commit()
 
     executor = RecordingExecutor([])
-    redispatched, blocked = await RunRecoveryService(db_session).recover(
-        executor, stale_after_seconds=600
-    )
+    redispatched, blocked = await RunRecoveryService(db_session).recover(executor)
 
     assert created.id in redispatched and created.id in executor.dispatched
-    assert stale.id in blocked and stale.id not in executor.dispatched
-    run = await runs.get_for_workflow(stale.id)
+    assert interrupted.id in blocked and interrupted.id not in executor.dispatched
+    run = await runs.get_for_workflow(interrupted.id)
     assert run is not None
     assert run.status == RunStatus.BLOCKED
     assert run.completion_reason == CompletionReason.INGESTION_INTERRUPTED
     assert run.completed_at is not None
-    events = await AuditService.for_session(db_session).list_for_run(stale.id)
-    assert events[-1].event_type == "RunStatusChanged"
-    assert events[-1].reason_code == "ingestion_interrupted"
+    events = await AuditService.for_session(db_session).list_for_run(interrupted.id)
+    assert any(
+        e.event_type == "RunStatusChanged" and e.reason_code == "ingestion_interrupted"
+        for e in events
+    )
+
+
+async def test_startup_recovery_blocks_run_interrupted_just_now(
+    db_session: AsyncSession,
+) -> None:
+    # Regression: a run can be left in ingesting_requisition only by a crash, which leaves no
+    # worker behind, so recovery must block it however recently ingestion was claimed — not
+    # only once it has aged past a threshold.
+    service = _service(db_session)
+    interrupted = await service.create(STARTER, "REQ-OPEN-1", "corr-fresh-1")
+    await db_session.commit()
+    runs = ScreeningRunRepository(db_session)
+    assert await runs.claim_for_ingestion(interrupted.id) is not None
+    await db_session.commit()
+
+    executor = RecordingExecutor([])
+    _redispatched, blocked = await RunRecoveryService(db_session).recover(executor)
+
+    assert interrupted.id in blocked and interrupted.id not in executor.dispatched
+    run = await runs.get_for_workflow(interrupted.id)
+    assert run is not None
+    assert run.status == RunStatus.BLOCKED
+    assert run.completion_reason == CompletionReason.INGESTION_INTERRUPTED
 
 
 async def test_double_dispatch_ingests_once(db_session: AsyncSession) -> None:
