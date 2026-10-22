@@ -70,8 +70,6 @@ class Settings(BaseSettings):
     REQUISITION_ELIGIBLE_SOURCE_STATUSES: tuple[str, ...] = ("open",)
     # Background execution of screening runs (D-06, BE-2.2).
     RUN_EXECUTOR: RunExecutorKind = RunExecutorKind.IN_PROCESS
-    # Startup recovery blocks runs left in ingesting_requisition longer than this.
-    INGESTION_STALE_AFTER_SECONDS: int = Field(default=600, gt=0)
     # Role brief generation (D-31, D-32, D-37). Off by default: runs stop at role_brief_draft.
     FEATURE_ROLE_BRIEF: bool = False
     # AI_PROVIDER: "mock" | "groq". Unset by default; "mock" is refused in production.

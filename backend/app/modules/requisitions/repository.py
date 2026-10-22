@@ -12,7 +12,6 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from datetime import timedelta
 from typing import Any, Protocol
 
 from sqlalchemy import ColumnElement, and_, func, or_, select, update
@@ -197,16 +196,6 @@ class ScreeningRunRepository:
             select(ScreeningRun.id)
             .where(ScreeningRun.status == status.value)
             .order_by(ScreeningRun.started_at)
-        )
-        return list(result.all())
-
-    async def list_stale_ids(self, status: RunStatus, older_than_seconds: int) -> list[uuid.UUID]:
-        """Unscoped, for startup recovery only: runs in ``status`` started too long ago."""
-        cutoff = utc_now() - timedelta(seconds=older_than_seconds)
-        result = await self._session.scalars(
-            select(ScreeningRun.id).where(
-                ScreeningRun.status == status.value, ScreeningRun.started_at < cutoff
-            )
         )
         return list(result.all())
 

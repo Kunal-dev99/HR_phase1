@@ -593,7 +593,13 @@ def build_run_executor(settings: Settings, handler: RunHandler) -> RunExecutor:
 
 
 class RunRecoveryService:
-    """Startup recovery (D-06): block stale ingesting runs, redispatch created ones."""
+    """Startup recovery (D-06): block interrupted ingesting runs, redispatch created ones.
+
+    Runs execute only in-process (``InProcessExecutor``), whose ``shutdown`` awaits every
+    in-flight task, so a clean stop leaves no run in ``ingesting_requisition``. Any run found
+    in that state at startup therefore lost its worker to a crash and has no owner left: it
+    is blocked as ``ingestion_interrupted`` regardless of how long ago it was claimed.
+    """
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -601,15 +607,13 @@ class RunRecoveryService:
         self._audit = AuditService.for_session(session)
 
     async def recover(
-        self, executor: RunExecutor, *, stale_after_seconds: int
+        self, executor: RunExecutor
     ) -> tuple[list[uuid.UUID], list[uuid.UUID]]:
         """Return ``(redispatched, blocked)`` run IDs."""
         blocked: list[uuid.UUID] = []
         try:
-            stale = await self._runs.list_stale_ids(
-                RunStatus.INGESTING_REQUISITION, stale_after_seconds
-            )
-            for run_id in stale:
+            interrupted = await self._runs.list_ids_in_status(RunStatus.INGESTING_REQUISITION)
+            for run_id in interrupted:
                 run = await self._runs.transition(
                     run_id,
                     expected_status=RunStatus.INGESTING_REQUISITION,
