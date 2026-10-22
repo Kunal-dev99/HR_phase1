@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     HR_SYSTEM_ADAPTER: str | None = None
     # Per-call timeout for HR System adapter calls (BE-1.4). One attempt, no retries (D-06).
     HR_SYSTEM_TIMEOUT_SECONDS: float = Field(default=10.0, gt=0, le=300)
+    # HR System statuses that make a requisition eligible for screening (D-07, BE-1.6).
+    # Set as JSON, e.g. REQUISITION_ELIGIBLE_SOURCE_STATUSES='["open"]'.
+    REQUISITION_ELIGIBLE_SOURCE_STATUSES: tuple[str, ...] = ("open",)
 
     @model_validator(mode="after")
     def _fail_closed_in_production(self) -> Settings:
