@@ -23,6 +23,7 @@ from app.core.settings import get_settings
 from app.modules.audit import models as audit_models  # noqa: F401
 from app.modules.integrations import models as integrations_models  # noqa: F401
 from app.modules.requisitions import models as requisitions_models  # noqa: F401
+from app.modules.role_briefs import models as role_briefs_models  # noqa: F401
 
 config = context.config
 
