@@ -26,6 +26,20 @@ export function errorMessage(result: Extract<ApiResult<unknown>, { ok: false }>,
   return `Request failed (HTTP ${status}).${correlationId ? ` (Correlation ID: ${correlationId})` : ""}`;
 }
 
+export type BriefCallOperation = "get_brief" | "approve";
+
+// User-facing message for a failed role-brief call (FE-7.2).
+export function roleBriefErrorMessage(
+  result: Extract<ApiResult<unknown>, { ok: false }>,
+  op: BriefCallOperation,
+): string {
+  const { status } = result;
+  if (op === "approve" && status === 403) return "You do not have permission to approve (role_brief:approve).";
+  if (op === "approve" && status === 409) return "This brief can no longer be approved. Refresh.";
+  if (op === "get_brief" && status === 404) return "No role brief yet.";
+  return errorMessage(result, "get");
+}
+
 const COMPLETION_REASON_LABELS: Record<Schemas["CompletionReason"], string> = {
   requisition_not_found: "Requisition not found in the HR System",
   requisition_not_eligible_status: "Requisition is not in an eligible status",
@@ -33,6 +47,8 @@ const COMPLETION_REASON_LABELS: Record<Schemas["CompletionReason"], string> = {
   hr_system_unavailable: "HR System unavailable",
   hr_response_invalid: "HR System returned an invalid response",
   ingestion_interrupted: "Requisition ingestion was interrupted",
+  role_brief_ai_unavailable: "The AI service was unavailable. Start a new run to try again.",
+  role_brief_output_invalid: "The AI output failed validation; no brief was stored.",
 };
 
 // Unknown (future) codes are shown raw.
