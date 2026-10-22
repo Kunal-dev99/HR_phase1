@@ -6,6 +6,7 @@ import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
 
+import pytest
 import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -114,6 +115,7 @@ async def committed_run(migrated_database: str) -> AsyncIterator[tuple[str, uuid
         await engine.dispose()
 
 
+@pytest.mark.pg_only
 async def test_claim_is_single_winner(
     committed_run: tuple[str, uuid.UUID], db_session: AsyncSession
 ) -> None:

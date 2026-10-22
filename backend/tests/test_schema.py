@@ -20,6 +20,7 @@ def _requisition(external_id: str, hr_system_key: str = "mock") -> Requisition:
     )
 
 
+@pytest.mark.pg_only
 async def test_requisition_unique_external_id(db_session: AsyncSession) -> None:
     db_session.add(_requisition("REQ-UNIQUE-1"))
     await db_session.flush()
@@ -35,6 +36,7 @@ async def test_requisition_unique_external_id(db_session: AsyncSession) -> None:
             await db_session.flush()
 
 
+@pytest.mark.pg_only
 async def test_screening_run_status_has_no_check_constraint(db_session: AsyncSession) -> None:
     """D-10: status is validated by the application enum only, so new states stay additive."""
     rows = await db_session.execute(

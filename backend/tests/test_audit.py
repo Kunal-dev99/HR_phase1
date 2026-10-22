@@ -26,6 +26,7 @@ async def _record(session: AsyncSession, run_id: uuid.UUID) -> uuid.UUID:
     return event.id
 
 
+@pytest.mark.pg_only
 async def test_audit_event_is_append_only(db_session: AsyncSession) -> None:
     run_id = uuid.uuid4()
     event_id = await _record(db_session, run_id)

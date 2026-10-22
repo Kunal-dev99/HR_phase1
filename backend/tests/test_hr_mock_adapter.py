@@ -99,6 +99,7 @@ async def _run_id(session: AsyncSession) -> uuid.UUID:
     return run.id
 
 
+@pytest.mark.pg_only
 async def test_integration_attempt_recorded_without_payload(db_session: AsyncSession) -> None:
     run_id = await _run_id(db_session)
     service = HRSystemService.for_session(db_session, MockHRSystemAdapter(), timeout_seconds=5)

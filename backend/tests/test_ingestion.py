@@ -342,6 +342,7 @@ async def _status(session: AsyncSession, run_id: uuid.UUID) -> str | None:
     return None if run is None else run.status
 
 
+@pytest.mark.pg_only
 async def test_every_transition_has_audit_event_in_same_transaction(
     db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:

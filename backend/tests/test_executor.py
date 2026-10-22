@@ -70,6 +70,7 @@ async def test_dispatch_after_commit_only(
     assert log == []
 
 
+@pytest.mark.pg_only
 async def test_startup_recovery_redispatches_created_and_blocks_stale(
     db_session: AsyncSession,
 ) -> None:

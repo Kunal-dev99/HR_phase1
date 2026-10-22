@@ -2,6 +2,7 @@
 
 import asyncio
 
+import pytest
 from alembic import command
 from alembic.script import ScriptDirectory
 from sqlalchemy import text
@@ -44,6 +45,7 @@ PHASE1_TABLES = {
 }
 
 
+@pytest.mark.pg_only
 def test_migration_round_trip(migrated_database: str) -> None:
     cfg = alembic_config()
     head = ScriptDirectory.from_config(cfg).get_current_head()
@@ -61,6 +63,7 @@ def test_migration_round_trip(migrated_database: str) -> None:
     assert asyncio.run(_public_tables(migrated_database)) == tables_at_head
 
 
+@pytest.mark.pg_only
 def test_downgrade_0002_removes_only_its_tables(migrated_database: str) -> None:
     cfg = alembic_config()
     try:

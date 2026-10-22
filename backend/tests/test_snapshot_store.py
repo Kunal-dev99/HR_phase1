@@ -86,6 +86,7 @@ async def test_hash_is_canonical_and_verified(db_session: AsyncSession) -> None:
     assert capture.snapshot.external_version == "v1"
 
 
+@pytest.mark.pg_only
 async def test_tampered_payload_raises(db_session: AsyncSession) -> None:
     service = SnapshotService.for_session(db_session)
     capture = await service.capture(
