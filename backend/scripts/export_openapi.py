@@ -30,6 +30,9 @@ EXPORT_ENVIRONMENT: dict[str, str] = {
     "AUTH_MODE": "disabled",
     "FEATURE_SCREENING_RUNS": "true",
     "HR_SYSTEM_ADAPTER": "mock",
+    # Role brief routes (D-39). The mock provider needs no key; none is read.
+    "FEATURE_ROLE_BRIEF": "true",
+    "AI_PROVIDER": "mock",
 }
 
 
@@ -46,6 +49,8 @@ def build_schema() -> dict[str, Any]:
         ENVIRONMENT=settings_module.Environment.DEVELOPMENT,
         FEATURE_SCREENING_RUNS=True,
         HR_SYSTEM_ADAPTER=settings_module.MOCK_HR_SYSTEM_ADAPTER,
+        FEATURE_ROLE_BRIEF=True,
+        AI_PROVIDER=settings_module.MOCK_AI_PROVIDER,
     )
     app = main_module.create_app(settings)
     schema: dict[str, Any] = app.openapi()

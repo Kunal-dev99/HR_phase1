@@ -1,6 +1,124 @@
 {
   "components": {
     "schemas": {
+      "AIInference": {
+        "additionalProperties": false,
+        "properties": {
+          "rationale": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Rationale",
+            "type": "string"
+          },
+          "source_refs": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            },
+            "maxItems": 10,
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "statement": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Statement",
+            "type": "string"
+          }
+        },
+        "required": [
+          "statement",
+          "rationale",
+          "source_refs"
+        ],
+        "title": "AIInference",
+        "type": "object"
+      },
+      "Ambiguity": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "suggested_question": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Suggested Question",
+            "type": "string"
+          },
+          "topic": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Topic",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic",
+          "description",
+          "severity",
+          "suggested_question"
+        ],
+        "title": "Ambiguity",
+        "type": "object"
+      },
+      "ApproveRoleBriefRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "role_brief_version_id": {
+            "format": "uuid",
+            "title": "Role Brief Version Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role_brief_version_id"
+        ],
+        "title": "ApproveRoleBriefRequest",
+        "type": "object"
+      },
+      "Basis": {
+        "enum": [
+          "source_fact",
+          "ai_inference"
+        ],
+        "title": "Basis",
+        "type": "string"
+      },
+      "BriefItem": {
+        "additionalProperties": false,
+        "properties": {
+          "basis": {
+            "$ref": "#/components/schemas/Basis"
+          },
+          "source_refs": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            },
+            "maxItems": 10,
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "text": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "basis",
+          "source_refs"
+        ],
+        "title": "BriefItem",
+        "type": "object"
+      },
       "CompletionReason": {
         "description": "Public ``completion_reason`` codes for a blocked run (D-07).",
         "enum": [
@@ -9,7 +127,9 @@
           "requisition_incomplete",
           "hr_system_unavailable",
           "hr_response_invalid",
-          "ingestion_interrupted"
+          "ingestion_interrupted",
+          "role_brief_ai_unavailable",
+          "role_brief_output_invalid"
         ],
         "title": "CompletionReason",
         "type": "string"
@@ -25,6 +145,215 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "RoleBriefResponse": {
+        "description": "A brief version as the API returns it. Never carries the raw snapshot payload.",
+        "properties": {
+          "ai_inferences": {
+            "items": {
+              "$ref": "#/components/schemas/AIInference"
+            },
+            "title": "Ai Inferences",
+            "type": "array"
+          },
+          "ambiguities": {
+            "items": {
+              "$ref": "#/components/schemas/Ambiguity"
+            },
+            "title": "Ambiguities",
+            "type": "array"
+          },
+          "approved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
+          "approved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "title": "Created By",
+            "type": "string"
+          },
+          "explicit_source_facts": {
+            "items": {
+              "$ref": "#/components/schemas/SourceFact"
+            },
+            "title": "Explicit Source Facts",
+            "type": "array"
+          },
+          "model_name": {
+            "title": "Model Name",
+            "type": "string"
+          },
+          "model_provider": {
+            "title": "Model Provider",
+            "type": "string"
+          },
+          "prompt_version": {
+            "title": "Prompt Version",
+            "type": "string"
+          },
+          "requisition_id": {
+            "format": "uuid",
+            "title": "Requisition Id",
+            "type": "string"
+          },
+          "role_brief_version_id": {
+            "format": "uuid",
+            "title": "Role Brief Version Id",
+            "type": "string"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "screening_run_id": {
+            "format": "uuid",
+            "title": "Screening Run Id",
+            "type": "string"
+          },
+          "source_payload_hash": {
+            "title": "Source Payload Hash",
+            "type": "string"
+          },
+          "source_snapshot_id": {
+            "format": "uuid",
+            "title": "Source Snapshot Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RoleBriefStatus"
+          },
+          "structured_role_data": {
+            "$ref": "#/components/schemas/RoleStructuredData"
+          },
+          "version_number": {
+            "title": "Version Number",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "role_brief_version_id",
+          "screening_run_id",
+          "requisition_id",
+          "version_number",
+          "status",
+          "structured_role_data",
+          "explicit_source_facts",
+          "ai_inferences",
+          "ambiguities",
+          "schema_version",
+          "prompt_version",
+          "model_provider",
+          "model_name",
+          "source_snapshot_id",
+          "source_payload_hash",
+          "created_by",
+          "created_at",
+          "approved_by",
+          "approved_at"
+        ],
+        "title": "RoleBriefResponse",
+        "type": "object"
+      },
+      "RoleBriefStatus": {
+        "description": "New briefs are ``awaiting_review``; ``draft`` and ``superseded`` are reserved (D-37).",
+        "enum": [
+          "draft",
+          "awaiting_review",
+          "approved",
+          "superseded"
+        ],
+        "title": "RoleBriefStatus",
+        "type": "string"
+      },
+      "RoleStructuredData": {
+        "additionalProperties": false,
+        "description": "``role_brief_version.structured_role_data``.",
+        "properties": {
+          "employment_constraints": {
+            "items": {
+              "$ref": "#/components/schemas/BriefItem"
+            },
+            "maxItems": 50,
+            "title": "Employment Constraints",
+            "type": "array"
+          },
+          "location_constraints": {
+            "items": {
+              "$ref": "#/components/schemas/BriefItem"
+            },
+            "maxItems": 50,
+            "title": "Location Constraints",
+            "type": "array"
+          },
+          "preferred_capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/BriefItem"
+            },
+            "maxItems": 50,
+            "title": "Preferred Capabilities",
+            "type": "array"
+          },
+          "required_capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/BriefItem"
+            },
+            "maxItems": 50,
+            "title": "Required Capabilities",
+            "type": "array"
+          },
+          "responsibilities": {
+            "items": {
+              "$ref": "#/components/schemas/BriefItem"
+            },
+            "maxItems": 50,
+            "title": "Responsibilities",
+            "type": "array"
+          },
+          "role_purpose": {
+            "$ref": "#/components/schemas/BriefItem"
+          },
+          "role_title": {
+            "$ref": "#/components/schemas/BriefItem"
+          },
+          "seniority": {
+            "$ref": "#/components/schemas/BriefItem"
+          }
+        },
+        "required": [
+          "role_title",
+          "role_purpose",
+          "responsibilities",
+          "required_capabilities",
+          "preferred_capabilities",
+          "seniority",
+          "location_constraints",
+          "employment_constraints"
+        ],
+        "title": "RoleStructuredData",
         "type": "object"
       },
       "RunPhases": {
@@ -212,6 +541,18 @@
               }
             ]
           },
+          "role_brief_version_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role Brief Version Id"
+          },
           "run_id": {
             "format": "uuid",
             "title": "Run Id",
@@ -250,6 +591,63 @@
           "correlation_id"
         ],
         "title": "ScreeningRunStatusResponse",
+        "type": "object"
+      },
+      "Severity": {
+        "enum": [
+          "material",
+          "minor"
+        ],
+        "title": "Severity",
+        "type": "string"
+      },
+      "SourceFact": {
+        "additionalProperties": false,
+        "properties": {
+          "source_refs": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRef"
+            },
+            "maxItems": 10,
+            "title": "Source Refs",
+            "type": "array"
+          },
+          "statement": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Statement",
+            "type": "string"
+          }
+        },
+        "required": [
+          "statement",
+          "source_refs"
+        ],
+        "title": "SourceFact",
+        "type": "object"
+      },
+      "SourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\[\\d{1,3}\\])?(\\.[A-Za-z_][A-Za-z0-9_]*(\\[\\d{1,3}\\])?)*$",
+            "title": "Path",
+            "type": "string"
+          },
+          "quote": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Quote",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "quote"
+        ],
+        "title": "SourceRef",
         "type": "object"
       },
       "ValidationError": {
@@ -381,6 +779,102 @@
         "summary": "Get Screening Run",
         "tags": [
           "screening-runs"
+        ]
+      }
+    },
+    "/api/v1/screening-runs/{run_id}/approve-role-brief": {
+      "post": {
+        "operationId": "approve_role_brief_api_v1_screening_runs__run_id__approve_role_brief_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveRoleBriefRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleBriefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Approve Role Brief",
+        "tags": [
+          "role-briefs"
+        ]
+      }
+    },
+    "/api/v1/screening-runs/{run_id}/role-brief": {
+      "get": {
+        "operationId": "get_role_brief_api_v1_screening_runs__run_id__role_brief_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleBriefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Role Brief",
+        "tags": [
+          "role-briefs"
         ]
       }
     },
