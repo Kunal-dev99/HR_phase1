@@ -506,13 +506,13 @@ unchanged. It has the in-repo components, a same-origin proxy to the backend, ge
 API types and the dev-only principal picker. It has no screening-run screens yet.
 **Precondition:** none. It can be built in parallel with Requisitions Phase 2.
 
-- [ ] FE-3.1 Isolation setup (D-03). Create worktree
+- [x] FE-3.1 Isolation setup (D-03). Create worktree
   `/home/user/HR_phase1-worktrees/mvp-ui-phase3` on branch `feature/mvp-ui-phase3`, based
   on the current reviewed integration branch (the branch holding Requisitions Phase 1).
   Create the database `hr_phase1_mvpui_copy` and migrate it to that branch's head with
   `backend/.env` in the worktree pointing at it.
   Done-when: the report shows `git worktree list` with the Phase 3 path, `psql -l` listing `hr_phase1_mvpui_copy`, and `alembic current` on it.
-- [ ] BE-3.1 OpenAPI export script (**PROPOSED (D-23)**). Add
+- [x] BE-3.1 OpenAPI export script (**PROPOSED (D-23)**). Add
   `backend/scripts/export_openapi.py`. It builds the app with
   `create_app(Settings(DATABASE_URL=<placeholder>, ENVIRONMENT=development,
   FEATURE_SCREENING_RUNS=True, HR_SYSTEM_ADAPTER="mock"))` so feature-flagged routes
@@ -520,7 +520,7 @@ API types and the dev-only principal picker. It has no screening-run screens yet
   `app.openapi()` to `backend/openapi.json` as indented JSON with sorted keys, and the
   file is committed. It mounts no route, so D-14 and the route audit are unchanged.
   Done-when: `cd backend && python scripts/export_openapi.py` writes `backend/openapi.json` whose `paths` contain `/healthz`, and `ruff check .`, `mypy app` and `pytest` still pass.
-- [ ] FE-3.2 Scaffold `frontend/` (**D-20**, **PROPOSED (D-25)**). Use Next.js App Router
+- [x] FE-3.2 Scaffold `frontend/` (**D-20**, **PROPOSED (D-25)**). Use Next.js App Router
   and TypeScript (`strict`), with `src/app/`, Tailwind CSS, ESLint (flat config with the
   Next.js rules) and a committed `package-lock.json`. Use the current stable Next.js major
   at scaffold time, and declare Node ≥ 20 in `engines`. Scripts: `dev`, `build`, `start`,
@@ -529,14 +529,14 @@ API types and the dev-only principal picker. It has no screening-run screens yet
   `NEXT_PUBLIC_FEATURE_SCREENING_RUNS=false`. `.env*.local` stays untracked. The home page
   is a placeholder. `scripts/start-frontend.sh` and `.ps1` are not modified.
   Done-when: `scripts/start-frontend.sh` serves the placeholder home page on http://localhost:3000 (manual check), and `npm run build`, `npm run lint` and `npm run typecheck` pass.
-- [ ] FE-3.3 Minimal design system (**D-20**). Tailwind theme tokens (colour, spacing,
+- [x] FE-3.3 Minimal design system (**D-20**). Tailwind theme tokens (colour, spacing,
   radius, font sizes) go in `src/app/globals.css`. Add seven components in
   `src/components/ui/`, exported from `index.ts`: `PageShell`, `Card`, `Button`,
   `TextField`, `Alert` (info/success/warning/error), `StatusBadge` and `KeyValueList`.
   Text is rendered as escaped data only, with no `dangerouslySetInnerHTML`. The
   placeholder home page uses `PageShell` and `Card`.
   Done-when: `npm run build`, `npm run lint` and `npm run typecheck` pass, and Grep shows no `dangerouslySetInnerHTML` under `frontend/src`.
-- [ ] FE-3.4 Same-origin API path and typed client (**PROPOSED (D-22)**, **PROPOSED
+- [x] FE-3.4 Same-origin API path and typed client (**PROPOSED (D-22)**, **PROPOSED
   (D-23)**). In `next.config.ts`, rewrite `/api/v1/:path*` and `/healthz` to
   `${BACKEND_URL}`, with default `http://localhost:8000`. `npm run gen:api` runs
   `openapi-typescript ../backend/openapi.json -o src/api/schema.d.ts`, and the generated
@@ -544,7 +544,7 @@ API types and the dev-only principal picker. It has no screening-run screens yet
   It returns `{ok: true, status, data, correlationId}` or `{ok: false, status, error,
   correlationId}`, and network failures map to `status: 0`. No backend change and no CORS.
   Done-when: with the backend running from the worktree, `curl -s http://localhost:3000/healthz` returns `{"status":"ok"}` through the proxy (manual check), and `npm run gen:api` followed by `git status` shows no diff in `src/api/schema.d.ts`.
-- [ ] FE-3.5 Dev-only principal picker (**PROPOSED (D-21)**). `src/dev-auth/` holds the
+- [x] FE-3.5 Dev-only principal picker (**PROPOSED (D-21)**). `src/dev-auth/` holds the
   presets, stored in `localStorage`:
   - "No principal" (the default; sends no headers);
   - "Recruiter bu-1" (`screening_run:create,screening_run:read`, `bu-1`);
@@ -557,11 +557,32 @@ API types and the dev-only principal picker. It has no screening-run screens yet
   server start when `NEXT_PUBLIC_DEV_AUTH=true`.
   Done-when: `NEXT_PUBLIC_DEV_AUTH=true npm run build` exits non-zero with the D-21 message and `npm run build` with the flag unset passes; in `npm run dev` the picker is visible with the flag `true` and absent when it is unset (manual check).
 
-- [ ] **Phase 3 Done-when:** in the Phase 3 worktree, the engineers report real output with
+- [x] **Phase 3 Done-when:** in the Phase 3 worktree, the engineers report real output with
   every check passing: `npm run build`, `npm run lint`, `npm run typecheck` (frontend), and
   `ruff check .`, `mypy app`, `pytest` (backend). `scripts/start-frontend.sh` serves the
   home page. The `.ps1` script is unchanged, and the user checks it once on Windows
-  (Q-12).
+  (Q-12). *(The Windows `.ps1` check, Q-12, is still pending with the user.)*
+
+**Verified 2026-10-22 (MVP-light, D-18).** Merged at `8a0a973`. Files confirmed by
+Glob/Grep: `backend/scripts/export_openapi.py`; `backend/openapi.json` with paths
+`/healthz`, `/api/v1/screening-runs` and `/api/v1/screening-runs/{run_id}`;
+`frontend/package.json` with scripts `dev/build/start/lint/typecheck/gen:api` and
+`engines.node ">=20"`; `frontend/next.config.ts` with `rewrites()` and the D-21 production
+refusal; `frontend/src/components/ui/` with the seven components and `index.ts`;
+`frontend/src/api/client.ts` and `schema.d.ts`; `frontend/src/dev-auth/` (picker, presets,
+store, config). Grep finds no `dangerouslySetInnerHTML` under `frontend/src`. Reported output:
+orchestrator ran `npm run build`, `lint` and `typecheck` (exit 0) and
+`NEXT_PUBLIC_DEV_AUTH=true npm run build` (exit 1). Backend reported ruff clean, mypy (38
+files) clean, pytest 70 passed, `alembic current` 0002_requisitions (head) on
+`hr_phase1_mvpui_copy`, the export re-run gave no diff, and `git worktree list` and `psql -l`
+were shown. Frontend reported manual checks: `start-frontend.sh` served the home page on :3000,
+`/healthz` through the proxy returned `{"status":"ok"}`, `gen:api` left no diff, the D-21
+refusal message was shown, and the picker showed with the flag on and was absent with it unset.
+Deviations: kept the Next 16 scaffold config flags; removed `next/font/google` (no network
+fonts) and the demo SVGs; committed the scaffold `AGENTS.md` (Next.js agent note); the picker
+lives in `src/dev-auth/`, not `ui/`; FE-3.2 to FE-3.5 landed in one commit; BE-3.1 already
+exports the screening-run routes, which covers most of BE-4.1. Still open: Q-12 (Windows
+`.ps1` check, the user's).
 
 **Reversibility:** everything is new. Nothing in the backend imports `backend/scripts/` or
 reads `backend/openapi.json`. To roll back, remove the worktree or revert the branch.
