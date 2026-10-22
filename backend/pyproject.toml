@@ -3,6 +3,11 @@ name = "hr-screening-backend"
 version = "0.1.0"
 description = "AI-Enabled Recruitment Screening System - backend"
 requires-python = ">=3.12,<3.13"
+# Ranges stay here; reproducible installs use the committed locks (D-17):
+#   pip-compile --strip-extras --no-emit-index-url --output-file=requirements.lock pyproject.toml
+#   pip-compile --strip-extras --no-emit-index-url --extra=dev \
+#       --output-file=requirements-dev.lock pyproject.toml
+#   pip install -r requirements-dev.lock && pip install --no-deps -e .
 dependencies = [
     # >=0.159 for fastapi.routing.iter_route_contexts (route audit, BE-0.7)
     "fastapi>=0.159,<1",
