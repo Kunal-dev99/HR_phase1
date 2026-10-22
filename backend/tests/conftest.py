@@ -20,10 +20,11 @@ from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, create_async_engine
+from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 from sqlalchemy.pool import NullPool
 
-from app.core.db import get_session
+from app.core.db import get_session, make_engine
 from app.core.settings import Settings, get_settings
 from app.main import create_app
 from app.modules.integrations.adapters.hr_system.mock import MockHRSystemAdapter
@@ -38,6 +39,19 @@ def pytest_configure(config: pytest.Config) -> None:
         assert_copy_database(get_settings().DATABASE_URL)
     except UnsafeTestDatabaseError as exc:
         raise pytest.UsageError(str(exc)) from exc
+
+
+PG_ONLY_REASON = "PostgreSQL-only safeguard or SQL (D-26)"
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Skip ``pg_only`` tests unless DATABASE_URL is PostgreSQL (D-30)."""
+    if make_url(get_settings().DATABASE_URL).get_backend_name() == "postgresql":
+        return
+    skip = pytest.mark.skip(reason=PG_ONLY_REASON)
+    for item in items:
+        if item.get_closest_marker("pg_only") is not None:
+            item.add_marker(skip)
 
 
 def alembic_config() -> Config:
@@ -64,7 +78,7 @@ def migrated_database() -> Iterator[str]:
 
 @pytest_asyncio.fixture
 async def db_connection(migrated_database: str) -> AsyncIterator[AsyncConnection]:
-    engine = create_async_engine(migrated_database, poolclass=NullPool)
+    engine = make_engine(migrated_database, poolclass=NullPool)
     try:
         async with engine.connect() as connection:
             transaction = await connection.begin()

@@ -14,9 +14,8 @@ from alembic import context
 from alembic.util import CommandError
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
-from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.core.db import Base
+from app.core.db import Base, make_engine
 from app.core.db_guard import UnsafeDatabaseError, guard_database_for_environment
 from app.core.settings import get_settings
 
@@ -63,7 +62,7 @@ def _run_sync_migrations(connection: Connection) -> None:
 
 async def run_migrations_online() -> None:
     url = _database_url()  # guarded before the engine exists
-    engine = create_async_engine(url, poolclass=pool.NullPool)
+    engine = make_engine(url, poolclass=pool.NullPool)
     try:
         async with engine.connect() as connection:
             await connection.run_sync(_run_sync_migrations)
