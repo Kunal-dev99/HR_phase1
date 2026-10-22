@@ -346,6 +346,114 @@ every feature unless a later decision names an exception and the reason for it.
   Rejecting this decision means a follow-up task to change the scope source. The column
   can stay unused (D-01).
 
+## D-20 Frontend stack, in-repo design system, no hosting (MVP UI)
+
+- **Status:** Accepted — user decisions, 2026-10-22
+- **Date:** 2026-10-22
+- **Feature:** MVP UI — screening runs (`docs/DELIVERY_PLAN.md`, Phases 3–4; kickoff
+  `docs/prompts/kickoffs/2026-10-22-mvp-ui.md`)
+- **Decision:**
+  - **Framework:** Next.js with the App Router and TypeScript (`strict`), in `frontend/`.
+    This settles the "Next.js or Vite" item in `docs/ARCHITECTURE.md` and stays within
+    Tech Arch §2 (React + TypeScript).
+  - **Design system:** no external bundle. The design system is our own minimal set:
+    Tailwind theme tokens plus the in-repo components in `frontend/src/components/ui/`
+    (`PageShell`, `Card`, `Button`, `TextField`, `Alert`, `StatusBadge`, `KeyValueList`).
+    For the frontend-engineer rule "align to the design system", this set is the design
+    system. A new shared component needs a plan task.
+  - **Hosting:** skipped for this feature. Local dev only. Deployment stays open (Tech
+    Arch §15.5).
+- **Reason:** User instruction. No design system bundle was supplied, and the MVP needs a
+  demonstrable UI without new infrastructure.
+
+## D-21 Dev-only principal picker in the UI
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** MVP UI (FE-3.5)
+- **Decision:** While the backend only offers `AUTH_MODE=dev_header` (D-08), the UI gets
+  its principal from a dev-only picker with fixed presets ("No principal" by default,
+  "Recruiter bu-1", "Viewer bu-1", "Recruiter bu-other"). The choice is kept in
+  `localStorage`. The API client adds `X-Dev-Principal-Id`, `X-Dev-Permissions` and
+  `X-Dev-Business-Units` only when `NEXT_PUBLIC_DEV_AUTH=true` and
+  `NODE_ENV !== "production"`. `next.config.ts` throws during a production build or
+  production server start when `NEXT_PUBLIC_DEV_AUTH=true`. When the flag is off, no
+  headers are sent and the backend answers 401 (fail closed).
+- **Reason:** It makes the 401/403/404 paths demonstrable and needs no backend change.
+  Two independent guards protect production: this build refusal, and the backend's
+  refusal of `dev_header` in production (D-08). The UI is never the security boundary
+  (D-04).
+- **Alternatives:** (a) The Next.js server injects fixed headers from server env, which
+  allows only one principal per dev server. (b) Free-text principal fields, which are
+  more flexible but make typos easier (Q-13).
+
+## D-22 Browser-to-API path: same-origin Next.js rewrite
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** MVP UI (FE-3.4)
+- **Decision:** The browser calls same-origin `/api/v1/*` (and `/healthz`). `next.config.ts`
+  rewrites those paths to `BACKEND_URL` (default `http://localhost:8000`). The backend gets
+  no CORS middleware. Request headers, including `X-Dev-*` and `X-Correlation-ID`, pass
+  through the rewrite unchanged.
+- **Reason:** It needs no backend change (D-01), creates no cross-origin surface to
+  configure or fail open, and keeps one origin for later SSO cookies.
+- **Alternative:** FastAPI `CORSMiddleware` with an explicit origin allowlist behind a
+  setting. That would add backend config and preflight handling.
+
+## D-23 OpenAPI export script and generated API types (extends D-13, D-14)
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** MVP UI (BE-3.1, BE-4.1, FE-3.4, FE-4.2)
+- **Decision:** D-14 is unchanged, and no OpenAPI or docs route is mounted. A
+  `backend/scripts/export_openapi.py` script builds the app with feature flags on
+  (`FEATURE_SCREENING_RUNS=True`, `HR_SYSTEM_ADAPTER="mock"`, a placeholder
+  `DATABASE_URL`, no lifespan, no DB connection) and writes `app.openapi()` to the
+  committed `backend/openapi.json` (sorted keys). `frontend` runs `npm run gen:api`
+  (`openapi-typescript ../backend/openapi.json -o src/api/schema.d.ts`). The generated
+  file is committed and never hand-edited. This adds `backend/scripts/` to the D-13
+  layout, for offline tooling only. The app never imports it.
+- **Reason:** It is the export path that D-14 and the Phase 0 deferred list foresaw. The
+  frontend-engineer rule requires generated types.
+- **Consequence:** Whoever changes an API re-runs the export and `gen:api`. A CI drift
+  check is deferred (D-18).
+
+## D-24 Run status polling
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** MVP UI (FE-4.4)
+- **Decision:**
+  - The run status page polls `GET /api/v1/screening-runs/{run_id}` every 2 seconds,
+    with at most one request in flight.
+  - It stops when `status` is `role_brief_draft` or `blocked` (the stopping states of
+    this release, D-11), on a 401, 403 or 404 response, or after 120 seconds. On timeout
+    it shows "Still running — use Refresh".
+  - Any other status, including a future one, keeps polling (D-01 additive states). A
+    network or 5xx error shows a warning and keeps polling until the timeout.
+  - The manual Refresh button runs one GET and restarts polling if the run is not in a
+    stopping state.
+- **Reason:** Mock ingestion finishes in about a second, so 2 seconds is responsive and
+  cheap. A hard cap prevents endless polling of a stuck run, and stuck runs are blocked
+  by D-06 recovery anyway.
+
+## D-25 Frontend location, start scripts and UI feature flag
+
+- **Status:** Proposed — awaiting approval
+- **Date:** 2026-10-22
+- **Feature:** MVP UI (FE-3.2, FE-4.3, FE-4.4)
+- **Decision:** The app lives in `frontend/` at the repo root, with code under
+  `frontend/src/`. It keeps the contract `scripts/start-frontend.sh` and `.ps1` rely on:
+  `npm run dev -- --port <port>` from `frontend/`, and `.next/` as the build directory.
+  Both scripts stay unchanged. npm is the package manager, with a committed
+  `package-lock.json` and Node ≥ 20. The screening-run screens sit behind
+  `NEXT_PUBLIC_FEATURE_SCREENING_RUNS` (default `false`, which shows an "off" notice),
+  mirroring the backend flag (D-02, D-11).
+- **Reason:** It matches the existing scripts and `.gitignore` (`node_modules/`, `.next/`)
+  with no edits, and it satisfies the frontend-engineer D-02 rule that new screens sit
+  behind a flag.
+
 ---
 
 Never renumber existing IDs. New decisions are appended as D-05, D-06, …

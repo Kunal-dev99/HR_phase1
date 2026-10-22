@@ -29,8 +29,8 @@ shortlist back to the HR System — for recruiters and hiring teams.
 | Database | PostgreSQL | From spec §2 |
 | Background work | DB-backed state machine + queue workers (Celery/RQ + Redis); Temporal only if needed | Open (spec §15.9) |
 | Object storage | S3-compatible or Azure Blob | Open (hosting) |
-| Frontend | React + TypeScript (framework: Next.js or Vite — to confirm) | Partly open |
-| Design system | Not supplied yet | Open |
+| Frontend | React + TypeScript on Next.js (App Router), in `frontend/`; local dev only for now | Agreed (D-20) |
+| Design system | Own minimal set: Tailwind tokens + in-repo components in `frontend/src/components/ui/`; no external bundle | Agreed (D-20) |
 | API types | Generated from FastAPI OpenAPI (`openapi-typescript`) | Agreed |
 | Deployment | Containers on organization-approved cloud | Open (spec §15.5) |
 | Sourcing helper | `Extension/` — Chrome extension exporting Sales Navigator list rows to CSV | Existing |
@@ -78,6 +78,6 @@ model §4.
 
 ## Open items (from spec §15 and data model §10)
 
-HR System product and API; Fusion Mind contract; approved discovery sources; hosting;
-frontend framework and design system; volumes/SLOs; retention and residency; workflow
+HR System product and API; Fusion Mind contract; approved discovery sources; hosting (skipped for the MVP, D-20);
+volumes/SLOs; retention and residency; workflow
 engine choice.

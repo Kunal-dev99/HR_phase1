@@ -17,10 +17,10 @@ never as HTML or script.
 
 ## Rules
 
-- **Design system.** Align to the design system bundle verbatim: its components, tokens,
-  spacing and copy. Do not invent new components or restyle existing ones. The design
-  system is recorded in `docs/ARCHITECTURE.md`; while it is still open, use the project's
-  agreed component library defaults and flag every screen that will need a pass.
+- **Design system.** The design system is our own minimal set (D-20): Tailwind tokens and
+  the in-repo components in `frontend/src/components/ui/`. Build screens from those
+  components and tokens. Add a new component there only when a planned task needs it,
+  and don't restyle components ad hoc.
 - **Data access.** All data comes from the backend API. No direct database access, no
   calls to the HR System, Fusion Mind or discovery sources from the browser.
 - **Types.** API types are generated from the backend OpenAPI schema (for example
