@@ -6,6 +6,7 @@ Tests build their own instance with ``create_app(settings)``.
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -17,14 +18,17 @@ from app.core.db import dispose_engine, get_sessionmaker
 from app.core.logging import configure_logging
 from app.core.security import build_principal_provider, ensure_routes_protected
 from app.core.settings import Settings, ensure_safe_configuration, get_settings
-from app.modules.integrations.service import build_hr_system_adapter
+from app.modules.integrations.service import build_ai_model_adapter, build_hr_system_adapter
 from app.modules.requisitions.router import router as screening_runs_router
 from app.modules.requisitions.service import (
     RunExecutor,
+    RunHandler,
     RunRecoveryService,
     build_ingestion_handler,
     build_run_executor,
 )
+from app.modules.role_briefs.router import router as role_briefs_router
+from app.modules.role_briefs.service import build_role_brief_handler
 
 API_V1_PREFIX = "/api/v1"
 
@@ -57,6 +61,17 @@ def _session_scope() -> AsyncSession:
     return get_sessionmaker()()
 
 
+def chain_run_handlers(ingest: RunHandler, generate: RunHandler) -> RunHandler:
+    """Ingest, then generate the role brief (D-32). ``generate`` is a no-op unless the run
+    reached ``role_brief_draft``; each handler opens its own session."""
+
+    async def _run(run_id: uuid.UUID) -> None:
+        await ingest(run_id)
+        await generate(run_id)
+
+    return _run
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     # Validated again here in case a Settings object was built without validation.
@@ -81,10 +96,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if settings.FEATURE_SCREENING_RUNS:
         adapter = build_hr_system_adapter(settings)  # unset or unknown adapter: refuse
         app.state.hr_system_key = adapter.hr_system_key
-        app.state.run_executor = build_run_executor(
-            settings, build_ingestion_handler(settings, adapter, _session_scope)
-        )
+        handler = build_ingestion_handler(settings, adapter, _session_scope)
+        # Role brief generation is chained only when its flag is on (D-32, D-02).
+        if settings.FEATURE_ROLE_BRIEF:
+            ai_adapter = build_ai_model_adapter(settings)  # unset or unknown: refuse
+            handler = chain_run_handlers(
+                handler, build_role_brief_handler(settings, ai_adapter, _session_scope)
+            )
+        app.state.run_executor = build_run_executor(settings, handler)
         app.include_router(screening_runs_router, prefix=API_V1_PREFIX)
+        if settings.FEATURE_ROLE_BRIEF:
+            app.include_router(role_briefs_router, prefix=API_V1_PREFIX)
 
     # Fail closed (D-04): refuse to start if any non-public route lacks a permission.
     ensure_routes_protected(app)
