@@ -597,7 +597,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-32 Role brief trigger and execution
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Role Brief (AI) (BE-6.2, BE-6.5, BE-6.6)
 - **Decision:**
@@ -620,7 +620,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-33 Role brief failure states and retry
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Role Brief (AI) (BE-6.3, BE-6.5)
 - **Decision:**
@@ -644,7 +644,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-34 Role brief permissions and dev principal preset (extends D-08, D-21)
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Role Brief (AI) (BE-6.6, FE-7.3)
 - **Decision:**
@@ -664,7 +664,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-35 Prompt-injection guard for requisition text
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Role Brief (AI) (BE-6.3, BE-6.5, FE-7.4)
 - **Decision:** Requisition text is data, never instructions (Tech Arch §9).
@@ -687,7 +687,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-36 Source citation format and verification
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Role Brief (AI) (BE-6.5, FE-7.4)
 - **Decision:**
@@ -711,7 +711,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-37 Model choice, prompt/schema versioning and `role_brief_version` schema
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Role Brief (AI) (BE-6.2, BE-6.4, BE-6.5)
 - **Decision:**
@@ -746,7 +746,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-38 Phase-1 mapping, approval of ambiguities and UI polling (amends D-11, D-24)
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Role Brief (AI) (BE-6.5, BE-6.6, FE-7.4)
 - **Decision:**
@@ -767,7 +767,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-39 Module layout for role_briefs and the AI gateway (extends D-13, D-23)
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Role Brief (AI) (BE-6.3, BE-6.5, BE-6.6, BE-6.7)
 - **Decision:**

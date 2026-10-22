@@ -1014,7 +1014,7 @@ Numbered from Q-17 so they do not collide with Q-1…Q-16.
 ## Feature: Role Brief (AI)
 
 - **Kickoff:** `docs/prompts/kickoffs/2026-10-22-role-brief.md`
-- **Plan status:** PROPOSED — awaiting approval. D-31 records the user's decisions
+- **Plan status:** APPROVED by the user, 2026-10-22 — all defaults accepted (Q-22…Q-28); D-32…D-39 Accepted. D-31 records the user's decisions
   (Accepted). D-32…D-39 are "Proposed — awaiting approval", and the tasks below use their
   defaults. If approval changes a default, I amend the affected tasks before the build.
 - **Plan author:** solution-architect, 2026-10-22
@@ -1396,6 +1396,8 @@ pass.
 ### Open questions for approval (Role Brief)
 
 Numbered from Q-22 so they do not collide with Q-1…Q-21.
+
+**Resolved 2026-10-22:** the user approved all defaults (Q-22…Q-28).
 
 - **Q-22** Approve or amend D-32…D-39 (defaults are listed in `docs/DECISIONS.md`).
 - **Q-23** Data leaving the laptop: requisition text is sent to Groq, a third-party cloud
