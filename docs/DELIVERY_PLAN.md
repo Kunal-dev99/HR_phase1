@@ -1093,14 +1093,14 @@ AI-generated, schema-validated and citation-checked `role_brief_version` and mov
 to `role_configuration`. AI failure blocks the run with a reason and stores no brief.
 **Precondition:** D-32…D-39 approved (or amended).
 
-- [ ] BE-6.1 Isolation setup (D-03). Create worktree
+- [x] BE-6.1 Isolation setup (D-03). Create worktree
   `/home/user/HR_phase1-worktrees/role-brief-phase6` on branch `feature/role-brief-phase6`
   from `master` (`1f4406a`). In its `backend/.env` set
   `DATABASE_URL=sqlite+aiosqlite:///./hr_phase1_rolebrief_copy.db` and run `alembic upgrade
   head`. `backend/.env` is gitignored, and `GROQ_API_KEY` is only ever put there or in the
   shell environment (D-31).
   Done-when: the report shows `git worktree list` with the Phase 6 path and `alembic current` on `hr_phase1_rolebrief_copy.db` showing `0002_requisitions (head)`.
-- [ ] BE-6.2 Settings, dependency and env example (D-31, D-32). In
+- [x] BE-6.2 Settings, dependency and env example (D-31, D-32). In
   `backend/app/core/settings.py` add:
   - `FEATURE_ROLE_BRIEF: bool = False`;
   - `AI_PROVIDER: str | None = None` (`mock` | `groq`);
@@ -1123,7 +1123,7 @@ to `role_configuration`. AI failure blocks the run with a reason and stores no b
   `# GROQ_API_KEY=` (no value, with the note "set in backend/.env or the shell; never
   commit").
   Done-when: new test `test_settings.py::test_role_brief_requires_ai_provider_and_key` passes (flag without provider, and `groq` without key, both raise `UnsafeConfigurationError`), and Grep finds `httpx==` in `backend/requirements.lock` and `GROQ_API_KEY=` with no value in `backend/.env.example`.
-- [ ] BE-6.3 AI model gateway in `integrations` (D-31, D-35, D-39). Add
+- [x] BE-6.3 AI model gateway in `integrations` (D-31, D-35, D-39). Add
   `backend/app/modules/integrations/adapters/ai_model/`:
   - `base.py`: an `AIModelAdapter` protocol (`provider_key`,
     `async complete_json(request: AIRequest) -> AIResponse`); frozen dataclasses
@@ -1156,7 +1156,7 @@ to `role_configuration`. AI failure blocks the run with a reason and stores no b
     `role_brief.generate`, outcome, `error_code`, `http_status`; no bodies) in the caller's
     unit of work. Constants go in `integrations/constants.py`.
   Done-when: `mypy app` passes and BE-6.5's `test_generation_creates_brief_and_awaits_approval` asserts exactly one `integration_attempt` with `integration_name == "ai_model"` and outcome `success` for the run.
-- [ ] BE-6.4 Migration `0003_role_briefs` and model (D-37, D-28). Add
+- [x] BE-6.4 Migration `0003_role_briefs` and model (D-37, D-28). Add
   `backend/alembic/versions/0003_role_briefs.py` (down_revision `0002_requisitions`),
   dialect-aware like 0002: `JSON` on SQLite, JSONB on PostgreSQL, no server-side UUID or
   clock defaults on SQLite. It creates `role_brief_version` with the Data Model §4.4
@@ -1173,7 +1173,7 @@ to `role_configuration`. AI failure blocks the run with a reason and stores no b
   the index and the table. Add `RoleBriefVersion` in `role_briefs/models.py`, using
   `JSONType`, `UTCDateTime`, `default=uuid.uuid4` and `default=utc_now`.
   Done-when: on `hr_phase1_rolebrief_copy.db`, `alembic upgrade head`, `alembic downgrade -1`, `alembic upgrade head` all exit 0 and `alembic current` shows `0003_role_briefs (head)` (output in the report).
-- [ ] BE-6.5 `role_briefs` module and generation service (D-32, D-33, D-35, D-36, D-37). The
+- [x] BE-6.5 `role_briefs` module and generation service (D-32, D-33, D-35, D-36, D-37). The
   standard seven files go in `backend/app/modules/role_briefs/`.
   - `constants.py`: `RoleBriefStatus` (`draft`, `awaiting_review`, `approved`,
     `superseded`), `ROLE_BRIEF_SCHEMA_VERSION="1"`, `ROLE_BRIEF_PROMPT_VERSION="role_brief.v1"`,
@@ -1220,7 +1220,7 @@ to `role_configuration`. AI failure blocks the run with a reason and stores no b
     - `ScreeningRunStatusResponse` gains nullable `role_brief_version_id`.
     - `events.py` in `role_briefs` names `RoleBriefCreated` and `RoleBriefApproved`.
   Done-when: new tests `tests/test_role_briefs.py::test_generation_creates_brief_and_awaits_approval` (mock provider, `REQ-OPEN-1`: run is `awaiting_role_approval`, `role_brief_version_id` set, version `awaiting_review` with `model_name`, `prompt_version`, `schema_version`, `source_payload_hash` recorded, `RoleBriefCreated` audited) and `tests/test_role_briefs.py::test_invalid_ai_output_blocks_run` (`REQ-AI-INVALID-1`: run `blocked/role_brief_output_invalid` with `status_details.error_code == "citation_unverified"`, no `role_brief_version` row) pass on SQLite.
-- [ ] BE-6.6 Executor wiring and HTTP routes (D-32, D-34, D-38).
+- [x] BE-6.6 Executor wiring and HTTP routes (D-32, D-34, D-38).
   - `RoleBriefService` gets a builder `build_role_brief_handler(settings, gateway_adapter,
     session_scope)` in `role_briefs/service.py`. In `app/main.py`, when
     `FEATURE_ROLE_BRIEF=true`, the run handler becomes "ingest, then (new session)
@@ -1245,7 +1245,7 @@ to `role_configuration`. AI failure blocks the run with a reason and stores no b
     - The router calls only `RoleBriefService`. The service re-checks the permission as
       defence in depth (as `ScreeningRunService` does).
   Done-when: new tests `tests/test_api_role_briefs.py::test_brief_generated_and_approved_end_to_end` (`RUN_EXECUTOR=inline`, `AI_PROVIDER=mock`: POST `REQ-OPEN-1` → GET status `awaiting_role_approval` with phase_1 `awaiting_approval` → GET role-brief 200 → approve 200 → GET status `role_configuration` with phase_1 `completed`) and `tests/test_api_role_briefs.py::test_approve_without_permission_403` pass.
-- [ ] BE-6.7 OpenAPI re-export (D-23). In `backend/scripts/export_openapi.py`, add
+- [x] BE-6.7 OpenAPI re-export (D-23). In `backend/scripts/export_openapi.py`, add
   `FEATURE_ROLE_BRIEF=true` and `AI_PROVIDER=mock` to `EXPORT_ENVIRONMENT` and to the
   `Settings(...)` call. No key is needed or read. Run it and commit `backend/openapi.json`.
   Done-when: Grep shows `/api/v1/screening-runs/{run_id}/role-brief` and `/api/v1/screening-runs/{run_id}/approve-role-brief` under `paths` in `backend/openapi.json`, and `role_brief_version_id` in the `ScreeningRunStatusResponse` schema.
@@ -1257,13 +1257,41 @@ to `role_configuration`. AI failure blocks the run with a reason and stores no b
   role-brief. If the key is not set, the report says "not run: no GROQ_API_KEY", the task
   stays unticked and is listed as deferred, and it does not block Phase 7.
   Done-when: the report shows the run reaching `awaiting_role_approval` (or, if the model's output fails validation, `blocked/role_brief_output_invalid` with its `error_code`, reported as a finding), the brief's `model_name`, and `grep -c` of the key value over the backend console log and `git diff`/`git status` output returning 0.
+  Note: Not run 2026-10-22 — the session's permission checks blocked passing the API key on the command line (credential-leak guard). Pending: user adds GROQ_API_KEY to their laptop backend/.env (or the cloud environment settings) and runs it. Per this task, BE-6.8 does not block Phase 7.
 
-- [ ] **Phase 6 Done-when:** in the Phase 6 worktree on SQLite
+- [x] **Phase 6 Done-when:** in the Phase 6 worktree on SQLite
   (`DATABASE_URL=sqlite+aiosqlite:///./hr_phase1_sqlite_test.db` for pytest), the engineer
   reports real output: `ruff check .` and `mypy app` clean; `pytest -ra` passes, with only
   the existing `pg_only` tests skipped; and the BE-6.4 round trip. BE-6.8 has either been
   run or been recorded as "not run: no key". `git status` shows no `.env` or `.db` file
   tracked.
+  Caveat: ticked with BE-6.8 recorded as not run (see its note); it stays open.
+
+**Verified 2026-10-22 (MVP-light, D-18).** Merged to `master` at `324bcb4`.
+- Light Grep confirmed that the five named tests exist:
+  - `tests/test_settings.py::test_role_brief_requires_ai_provider_and_key`;
+  - `tests/test_role_briefs.py::test_generation_creates_brief_and_awaits_approval` and `::test_invalid_ai_output_blocks_run`;
+  - `tests/test_api_role_briefs.py::test_brief_generated_and_approved_end_to_end` and `::test_approve_without_permission_403`.
+- Grep also confirmed `alembic/versions/0003_role_briefs.py`, `app/modules/role_briefs/` (seven files), `app/modules/integrations/adapters/ai_model/{base,mock,groq}.py`, and the `/role-brief` and `/approve-role-brief` paths in `backend/openapi.json`.
+- Orchestrator run in the worktree on SQLite:
+  - `ruff check .` printed "All checks passed!";
+  - `mypy app` printed "Success: no issues found in 50 source files";
+  - `pytest` printed "65 passed, 10 skipped in 1.68s" (the 10 skips are `pg_only`);
+  - no `.db` or `.env` file is tracked;
+  - `.env.example` line 29 reads `# GROQ_API_KEY=` with no value.
+- Engineer report:
+  - `alembic upgrade` → `downgrade -1` → `upgrade` ran clean, and `alembic current` shows `0003_role_briefs (head)`;
+  - the OpenAPI export wrote 5 paths;
+  - mock smoke: POST `REQ-OPEN-1` 202 → GET `awaiting_role_approval` with phase_1 `awaiting_approval` → GET role-brief 200 (mock provider, prompt `role_brief.v1`, schema 1, citations present) → approve as recruiter 403 → approve as approver-1 200 `approved` → GET `role_configuration` with phase_1 `completed`.
+- Deviations from the plan (accepted for MVP-light):
+  - the pytest DB name is `hr_phase1_rolebrief_test.db`, not `hr_phase1_sqlite_test.db`;
+  - `RoleBriefResponse` adds `screening_run_id`, `requisition_id` and `created_by`;
+  - `seniority` is a single `BriefItem` and the constraint fields are lists (all required, strict-ready);
+  - on citation failures the `integration_attempt` row stays `success`, and the failure is recorded on the run and in the audit log;
+  - the success and approval audit reason codes are plain strings;
+  - `<` and `>` are escaped in the prompt's JSON block, so citation checks may fail if the model copies the escaped form;
+  - a lost generation race leaves no attempt row.
+- Not verified by me: the test output and the round trip were not re-run by the architect (no shell). They rest on the orchestrator's and the engineer's reported output.
 
 **Reversibility:**
 - `FEATURE_ROLE_BRIEF=false` (the default) mounts no role-brief routes, builds no AI adapter
