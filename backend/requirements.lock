@@ -4,6 +4,8 @@
 #
 #    pip-compile --no-emit-index-url --output-file=requirements.lock --strip-extras pyproject.toml
 #
+aiosqlite==0.22.1
+    # via hr-screening-backend (pyproject.toml)
 alembic==1.20.1
     # via hr-screening-backend (pyproject.toml)
 annotated-doc==0.0.5
