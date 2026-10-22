@@ -12,6 +12,17 @@ OPERATION_GET_REQUISITION = "get_requisition"
 # Selected by settings.HR_SYSTEM_ADAPTER; also the ``hr_system_key`` the mock reports.
 MOCK_HR_SYSTEM_KEY = "mock"
 
+# AI model gateway (BE-6.3, D-31, D-39).
+INTEGRATION_AI_MODEL = "ai_model"
+OPERATION_ROLE_BRIEF_GENERATE = "role_brief.generate"
+# Selected by settings.AI_PROVIDER; also recorded as ``model_provider``.
+MOCK_AI_PROVIDER_KEY = "mock"
+GROQ_AI_PROVIDER_KEY = "groq"
+# The model name the mock reports.
+MOCK_AI_MODEL = "mock-role-brief"
+# ``response_format.json_schema.name`` sent to the provider.
+AI_JSON_SCHEMA_NAME = "role_brief"
+
 # D-06: a single attempt per call, no retries yet.
 FIRST_ATTEMPT = 1
 
@@ -33,6 +44,22 @@ class HRErrorCode(StrEnum):
     ADAPTER_ERROR = "hr_adapter_error"
     INVALID_RESPONSE = "hr_response_invalid"
     ID_MISMATCH = "hr_response_id_mismatch"
+
+
+class AIErrorCode(StrEnum):
+    """AI failure codes (D-33): ``integration_attempt.error_code`` and ``status_details``."""
+
+    # AIUnavailable
+    TIMEOUT = "timeout"
+    UNAVAILABLE = "unavailable"
+    AUTH_FAILED = "auth_failed"
+    RATE_LIMITED = "rate_limited"
+    # AIOutputInvalid
+    INVALID_JSON = "invalid_json"
+    SCHEMA_INVALID = "schema_invalid"
+    REFUSED = "refused"
+    CITATION_UNVERIFIED = "citation_unverified"
+    UNCITED_REQUIREMENT = "uncited_requirement"
 
 
 # Column limits.

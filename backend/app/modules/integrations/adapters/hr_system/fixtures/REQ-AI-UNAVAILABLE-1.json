@@ -1,0 +1,15 @@
+{
+  "external_requisition_id": "REQ-AI-UNAVAILABLE-1",
+  "status": "open",
+  "business_unit": "bu-1",
+  "external_version": "1",
+  "last_modified_at": "2026-10-21T08:00:00+00:00",
+  "title": "QA Analyst",
+  "description": "Plan and run manual and automated tests for the mobile apps.",
+  "responsibilities": ["Write and maintain automated test suites"],
+  "required_skills": ["Test automation"],
+  "seniority": "junior",
+  "location": "Remote (EU)",
+  "employment_type": "contract",
+  "department": "Mobile"
+}

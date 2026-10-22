@@ -1,0 +1,20 @@
+{
+  "role_title": {"text": "Backend Engineer", "basis": "source_fact", "source_refs": [{"path": "title", "quote": "Backend Engineer"}]},
+  "role_purpose": {"text": "Build and maintain the customer portal APIs.", "basis": "source_fact", "source_refs": [{"path": "description", "quote": "Build and maintain the APIs behind the customer portal"}]},
+  "responsibilities": [
+    {"text": "Develop and test REST APIs.", "basis": "source_fact", "source_refs": [{"path": "responsibilities[0]", "quote": "Develop and test REST APIs"}]}
+  ],
+  "required_capabilities": [
+    {"text": "Python", "basis": "source_fact", "source_refs": [{"path": "required_skills[0]", "quote": "Python"}]},
+    {"text": "Ten years of Kubernetes experience", "basis": "source_fact", "source_refs": [{"path": "required_skills[1]", "quote": "Ten years of Kubernetes"}]}
+  ],
+  "preferred_capabilities": [],
+  "seniority": {"text": "Mid-level", "basis": "source_fact", "source_refs": [{"path": "seniority", "quote": "mid"}]},
+  "location_constraints": [
+    {"text": "London", "basis": "source_fact", "source_refs": [{"path": "location", "quote": "London"}]}
+  ],
+  "employment_constraints": [],
+  "explicit_source_facts": [],
+  "ai_inferences": [],
+  "ambiguities": []
+}

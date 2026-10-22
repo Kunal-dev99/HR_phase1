@@ -1,0 +1,35 @@
+{
+  "role_title": {"text": "Senior Data Engineer", "basis": "source_fact", "source_refs": [{"path": "title", "quote": "Senior Data Engineer"}]},
+  "role_purpose": {"text": "Design, build and operate the batch and streaming pipelines that feed the analytics platform.", "basis": "source_fact", "source_refs": [{"path": "description", "quote": "Design, build and operate the batch and streaming data pipelines"}]},
+  "responsibilities": [
+    {"text": "Own the ingestion pipelines end to end.", "basis": "source_fact", "source_refs": [{"path": "responsibilities[0]", "quote": "Own the ingestion pipelines end to end"}]},
+    {"text": "Review data models with analytics stakeholders.", "basis": "source_fact", "source_refs": [{"path": "responsibilities[1]", "quote": "Review data models with analytics stakeholders"}]}
+  ],
+  "required_capabilities": [
+    {"text": "Python", "basis": "source_fact", "source_refs": [{"path": "required_skills[0]", "quote": "Python"}]},
+    {"text": "SQL", "basis": "source_fact", "source_refs": [{"path": "required_skills[1]", "quote": "SQL"}]},
+    {"text": "Apache Spark", "basis": "source_fact", "source_refs": [{"path": "required_skills[2]", "quote": "Apache Spark"}]}
+  ],
+  "preferred_capabilities": [
+    {"text": "Kafka", "basis": "source_fact", "source_refs": [{"path": "preferred_skills[0]", "quote": "Kafka"}]},
+    {"text": "Experience with streaming frameworks beyond Kafka", "basis": "ai_inference", "source_refs": [{"path": "description", "quote": "streaming data pipelines"}]}
+  ],
+  "seniority": {"text": "Senior", "basis": "source_fact", "source_refs": [{"path": "seniority", "quote": "senior"}]},
+  "location_constraints": [
+    {"text": "Remote within the EU", "basis": "source_fact", "source_refs": [{"path": "location", "quote": "Remote (EU)"}]}
+  ],
+  "employment_constraints": [
+    {"text": "Full-time", "basis": "source_fact", "source_refs": [{"path": "employment_type", "quote": "full_time"}]}
+  ],
+  "explicit_source_facts": [
+    {"statement": "The role sits in the Data Platform department.", "source_refs": [{"path": "department", "quote": "Data Platform"}]},
+    {"statement": "The pipelines feed the analytics platform.", "source_refs": [{"path": "description", "quote": "feed the analytics platform"}]}
+  ],
+  "ai_inferences": [
+    {"statement": "The role likely includes on-call support for production pipelines.", "rationale": "\"Operate\" pipelines usually implies production support duties.", "source_refs": [{"path": "description", "quote": "operate"}]}
+  ],
+  "ambiguities": [
+    {"topic": "on_call", "description": "It is not stated whether operating the pipelines includes on-call duty.", "severity": "material", "suggested_question": "Does this role include an on-call rota, and how often?"},
+    {"topic": "spark_depth", "description": "The expected depth of Apache Spark experience is not stated.", "severity": "minor", "suggested_question": "Is production Spark tuning experience required or is general usage enough?"}
+  ]
+}

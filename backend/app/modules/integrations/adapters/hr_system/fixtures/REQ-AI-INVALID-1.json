@@ -1,0 +1,15 @@
+{
+  "external_requisition_id": "REQ-AI-INVALID-1",
+  "status": "open",
+  "business_unit": "bu-1",
+  "external_version": "1",
+  "last_modified_at": "2026-10-21T08:00:00+00:00",
+  "title": "Backend Engineer",
+  "description": "Build and maintain the APIs behind the customer portal.",
+  "responsibilities": ["Develop and test REST APIs"],
+  "required_skills": ["Python", "PostgreSQL"],
+  "seniority": "mid",
+  "location": "London",
+  "employment_type": "full_time",
+  "department": "Customer Platform"
+}
