@@ -225,6 +225,7 @@ class ScreeningRunService:
             started_at=run.started_at,
             completed_at=run.completed_at,
             correlation_id=run.correlation_id,
+            role_brief_version_id=run.role_brief_version_id,
         )
 
     async def create(

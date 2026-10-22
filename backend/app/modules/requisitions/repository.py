@@ -227,6 +227,7 @@ class ScreeningRunRepository:
         requisition_id: uuid.UUID | None = None,
         requisition_snapshot_id: uuid.UUID | None = None,
         business_unit_key: str | None = None,
+        role_brief_version_id: uuid.UUID | None = None,
         completion_reason: str | None = None,
         status_details: dict[str, Any] | None = None,
         completed: bool = False,
@@ -240,6 +241,7 @@ class ScreeningRunRepository:
             "requisition_id": requisition_id,
             "requisition_snapshot_id": requisition_snapshot_id,
             "business_unit_key": business_unit_key,
+            "role_brief_version_id": role_brief_version_id,
             "completion_reason": completion_reason,
             "status_details": status_details,
         }

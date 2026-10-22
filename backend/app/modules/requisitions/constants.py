@@ -44,6 +44,9 @@ class CompletionReason(StrEnum):
     HR_SYSTEM_UNAVAILABLE = "hr_system_unavailable"
     HR_RESPONSE_INVALID = "hr_response_invalid"
     INGESTION_INTERRUPTED = "ingestion_interrupted"
+    # Role brief generation failed (D-33).
+    ROLE_BRIEF_AI_UNAVAILABLE = "role_brief_ai_unavailable"
+    ROLE_BRIEF_OUTPUT_INVALID = "role_brief_output_invalid"
 
 
 class AuditReason(StrEnum):
@@ -97,9 +100,26 @@ SCREENING_RUNS_PATH = "/screening-runs"
 PHASE_PENDING = "pending"
 PHASE_IN_PROGRESS = "in_progress"
 PHASE_BLOCKED = "blocked"
+PHASE_AWAITING_APPROVAL = "awaiting_approval"
+PHASE_COMPLETED = "completed"
+# D-38: phase 1 completes once the role brief is approved (role_configuration onward).
+_PHASE_1_COMPLETED_STATUSES: tuple[RunStatus, ...] = (
+    RunStatus.ROLE_CONFIGURATION,
+    RunStatus.AWAITING_CONFIGURATION_APPROVAL,
+    RunStatus.SOURCING,
+    RunStatus.CANDIDATE_POOL_READY,
+    RunStatus.EVALUATING_PROFILES,
+    RunStatus.ASSESSMENT_PROCESSING,
+    RunStatus.SHORTLIST_READY,
+    RunStatus.WRITING_BACK_TO_HR,
+    RunStatus.COMPLETED,
+    RunStatus.COMPLETED_WITH_EXCEPTIONS,
+)
 PHASE_1_BY_STATUS: dict[RunStatus, str] = {
     RunStatus.CREATED: PHASE_PENDING,
     RunStatus.INGESTING_REQUISITION: PHASE_IN_PROGRESS,
     RunStatus.ROLE_BRIEF_DRAFT: PHASE_IN_PROGRESS,
+    RunStatus.AWAITING_ROLE_APPROVAL: PHASE_AWAITING_APPROVAL,
+    **dict.fromkeys(_PHASE_1_COMPLETED_STATUSES, PHASE_COMPLETED),
     RunStatus.BLOCKED: PHASE_BLOCKED,
 }

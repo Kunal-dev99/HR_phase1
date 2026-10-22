@@ -136,3 +136,5 @@ class ScreeningRunStatusResponse(BaseModel):
     started_at: datetime
     completed_at: datetime | None
     correlation_id: str
+    # The run's current role brief version (D-38), once one is generated.
+    role_brief_version_id: uuid.UUID | None = None
