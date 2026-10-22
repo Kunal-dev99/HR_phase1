@@ -116,7 +116,7 @@ behaviour, not a trivial pass. Orchestrator output from the worktree against
 - `git worktree list` shows the Phase 0 path. `psql -l` lists `hr_phase1_p1req_copy`.
 - No forward-migration drops, no deletions vs the base commit, no `.env` tracked (the root
   `.gitignore` ignores `.env` and `.env.*`).
-- Engineer deviations a–f are logged as D-14…D-17 (Proposed). Follow-ups are BE-1.8,
+- Engineer deviations a–f are logged as D-14…D-17 (Accepted 2026-10-22). Follow-ups are BE-1.8,
   BE-2.6 and the deferred items below.
 
 **Reversibility:** everything is new under `backend/`. To roll back, run `alembic
@@ -137,10 +137,10 @@ Also deferred from Phase 0 after verification (2026-10-22):
   event in this feature. Relaxing it belongs to the first feature that writes non-run
   events, and that feature needs its own decision first. Its downgrade cannot restore NOT
   NULL once null rows exist, and append-only rows cannot be deleted to make that possible.
-- **Dependency lockfile** (D-17, Proposed). There is no lockfile today, and versions are
+- **Dependency lockfile** (D-17, Accepted). There is no lockfile today, and versions are
   ranges in `backend/pyproject.toml`. If D-17 is accepted, generate and commit the lock
   before the Phase 1 build starts.
-- **Committed OpenAPI export** (D-14, Proposed). The docs and OpenAPI routes are not
+- **Committed OpenAPI export** (D-14, Accepted). The docs and OpenAPI routes are not
   mounted. An export script that writes `app.openapi()` to a file comes with the first
   frontend feature, which matches the Phase 2 deferral of TypeScript type generation.
 - **Tests for the 32-key `details` limit and the startup route check.** Today
@@ -228,7 +228,7 @@ endpoint, which keeps it inert in a running app.
   still snapshotted and pinned for traceability. Not-found, inaccessible, unavailable and
   malformed responses create no requisition or snapshot.
   Done-when: `test_ingestion.py` passes with one test per fixture outcome (open→`role_brief_draft`; closed, incomplete, not found, other-BU, unavailable and malformed→`blocked` with the D-07/D-09 reason code), plus `test_ingestion.py::test_every_transition_has_audit_event_in_same_transaction` and `test_ingestion.py::test_no_values_invented_for_missing_fields`.
-- [ ] BE-1.8 Alembic CLI DB-copy guard (**PROPOSED (D-16)**; build only if D-16 is
+- [ ] BE-1.8 Alembic CLI DB-copy guard (**D-16 Accepted 2026-10-22 — build**; originally: build only if D-16 is
   accepted, otherwise strike it). Today the copy guard covers pytest only. `alembic/env.py`
   should apply the same `_copy`/`_test` rule whenever `ENVIRONMENT` is `development` or
   `test`. It refuses before connecting and prints the rejected database name. `staging`

@@ -217,7 +217,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-14 Interactive docs and OpenAPI route are not mounted
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Phase 1 — Requisitions (BE-0.2, BE-0.7; Phase 0 deviation a)
 - **Decision:** `create_app` sets `docs_url`, `redoc_url` and `openapi_url` to `None`, so
@@ -235,7 +235,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-15 Audit and startup hardening beyond D-08 and D-12
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Phase 1 — Requisitions (BE-0.6, BE-0.7; Phase 0 deviation c)
 - **Decision:** This extends D-12 and D-08. It does not rewrite them. The following,
@@ -258,7 +258,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-16 Alembic CLI refuses non-copy databases in development and test
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Phase 1 — Requisitions (BE-1.8; Phase 0 deviation d)
 - **Decision:** `alembic/env.py` applies the D-03 copy rule (database name ends in `_copy`
@@ -274,7 +274,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-17 Backend dependency locking
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Phase 1 — Requisitions (Phase 0 deviation f)
 - **Decision:** Keep the compatible ranges in `backend/pyproject.toml`, and commit a
