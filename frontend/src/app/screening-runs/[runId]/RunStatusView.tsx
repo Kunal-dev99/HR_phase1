@@ -6,17 +6,22 @@ import { useEffect, useState } from "react";
 import { completionReasonLabel, errorMessage } from "@/api/messages";
 import { getScreeningRun, type Schemas } from "@/api/screening-runs";
 import { Alert, Button, Card, KeyValueList, PageShell, StatusBadge } from "@/components/ui";
-import { isScreeningRunsEnabled } from "@/features";
+import { isRoleBriefEnabled, isScreeningRunsEnabled } from "@/features";
+import { RoleBriefPanel } from "./RoleBriefPanel";
 
-// D-24 polling.
+// D-24 polling; D-38 stopping statuses when the role brief flag is on.
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 120_000;
-const STOPPING_STATUSES = new Set<string>(["role_brief_draft", "blocked"]);
+const STOPPING_STATUSES = isRoleBriefEnabled()
+  ? new Set<string>(["awaiting_role_approval", "role_configuration", "blocked"])
+  : new Set<string>(["role_brief_draft", "blocked"]);
 const STOPPING_ERRORS = new Set<number>([401, 403, 404, 422]);
 
 function statusTone(status: string) {
   if (status === "role_brief_draft") return "success" as const;
   if (status === "blocked") return "error" as const;
+  if (status === "awaiting_role_approval") return "warning" as const;
+  if (status === "role_configuration") return "success" as const;
   return "info" as const;
 }
 
@@ -129,6 +134,14 @@ export function RunStatusView() {
               </p>
             )}
           </Card>
+          {isRoleBriefEnabled() && run.role_brief_version_id ? (
+            <RoleBriefPanel
+              runId={runId}
+              roleBriefVersionId={run.role_brief_version_id}
+              runStatus={run.status}
+              onApproved={refresh}
+            />
+          ) : null}
         </>
       ) : null}
     </PageShell>

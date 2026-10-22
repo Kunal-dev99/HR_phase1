@@ -34,6 +34,15 @@ export const DEV_PRINCIPAL_PRESETS: readonly DevPrincipalPreset[] = [
       businessUnits: ["bu-other"],
     },
   },
+  {
+    id: "approver-bu-1",
+    label: "Approver bu-1",
+    principal: {
+      principalId: "dev-approver-bu-1",
+      permissions: ["screening_run:read", "role_brief:approve"],
+      businessUnits: ["bu-1"],
+    },
+  },
 ];
 
 export const DEFAULT_PRESET_ID = "none";

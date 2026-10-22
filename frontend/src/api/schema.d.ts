@@ -38,6 +38,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/screening-runs/{run_id}/approve-role-brief": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve Role Brief */
+        post: operations["approve_role_brief_api_v1_screening_runs__run_id__approve_role_brief_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/screening-runs/{run_id}/role-brief": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Role Brief */
+        get: operations["get_role_brief_api_v1_screening_runs__run_id__role_brief_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/healthz": {
         parameters: {
             query?: never;
@@ -62,16 +96,138 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AIInference */
+        AIInference: {
+            /** Rationale */
+            rationale: string;
+            /** Source Refs */
+            source_refs: components["schemas"]["SourceRef"][];
+            /** Statement */
+            statement: string;
+        };
+        /** Ambiguity */
+        Ambiguity: {
+            /** Description */
+            description: string;
+            severity: components["schemas"]["Severity"];
+            /** Suggested Question */
+            suggested_question: string;
+            /** Topic */
+            topic: string;
+        };
+        /** ApproveRoleBriefRequest */
+        ApproveRoleBriefRequest: {
+            /**
+             * Role Brief Version Id
+             * Format: uuid
+             */
+            role_brief_version_id: string;
+        };
+        /**
+         * Basis
+         * @enum {string}
+         */
+        Basis: "source_fact" | "ai_inference";
+        /** BriefItem */
+        BriefItem: {
+            basis: components["schemas"]["Basis"];
+            /** Source Refs */
+            source_refs: components["schemas"]["SourceRef"][];
+            /** Text */
+            text: string;
+        };
         /**
          * CompletionReason
          * @description Public ``completion_reason`` codes for a blocked run (D-07).
          * @enum {string}
          */
-        CompletionReason: "requisition_not_found" | "requisition_not_eligible_status" | "requisition_incomplete" | "hr_system_unavailable" | "hr_response_invalid" | "ingestion_interrupted";
+        CompletionReason: "requisition_not_found" | "requisition_not_eligible_status" | "requisition_incomplete" | "hr_system_unavailable" | "hr_response_invalid" | "ingestion_interrupted" | "role_brief_ai_unavailable" | "role_brief_output_invalid";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * RoleBriefResponse
+         * @description A brief version as the API returns it. Never carries the raw snapshot payload.
+         */
+        RoleBriefResponse: {
+            /** Ai Inferences */
+            ai_inferences: components["schemas"]["AIInference"][];
+            /** Ambiguities */
+            ambiguities: components["schemas"]["Ambiguity"][];
+            /** Approved At */
+            approved_at: string | null;
+            /** Approved By */
+            approved_by: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by: string;
+            /** Explicit Source Facts */
+            explicit_source_facts: components["schemas"]["SourceFact"][];
+            /** Model Name */
+            model_name: string;
+            /** Model Provider */
+            model_provider: string;
+            /** Prompt Version */
+            prompt_version: string;
+            /**
+             * Requisition Id
+             * Format: uuid
+             */
+            requisition_id: string;
+            /**
+             * Role Brief Version Id
+             * Format: uuid
+             */
+            role_brief_version_id: string;
+            /** Schema Version */
+            schema_version: string;
+            /**
+             * Screening Run Id
+             * Format: uuid
+             */
+            screening_run_id: string;
+            /** Source Payload Hash */
+            source_payload_hash: string;
+            /**
+             * Source Snapshot Id
+             * Format: uuid
+             */
+            source_snapshot_id: string;
+            status: components["schemas"]["RoleBriefStatus"];
+            structured_role_data: components["schemas"]["RoleStructuredData"];
+            /** Version Number */
+            version_number: number;
+        };
+        /**
+         * RoleBriefStatus
+         * @description New briefs are ``awaiting_review``; ``draft`` and ``superseded`` are reserved (D-37).
+         * @enum {string}
+         */
+        RoleBriefStatus: "draft" | "awaiting_review" | "approved" | "superseded";
+        /**
+         * RoleStructuredData
+         * @description ``role_brief_version.structured_role_data``.
+         */
+        RoleStructuredData: {
+            /** Employment Constraints */
+            employment_constraints: components["schemas"]["BriefItem"][];
+            /** Location Constraints */
+            location_constraints: components["schemas"]["BriefItem"][];
+            /** Preferred Capabilities */
+            preferred_capabilities: components["schemas"]["BriefItem"][];
+            /** Required Capabilities */
+            required_capabilities: components["schemas"]["BriefItem"][];
+            /** Responsibilities */
+            responsibilities: components["schemas"]["BriefItem"][];
+            role_purpose: components["schemas"]["BriefItem"];
+            role_title: components["schemas"]["BriefItem"];
+            seniority: components["schemas"]["BriefItem"];
         };
         /** RunPhases */
         RunPhases: {
@@ -135,6 +291,8 @@ export interface components {
             correlation_id: string;
             phases: components["schemas"]["RunPhases"];
             requisition: components["schemas"]["RunRequisitionReference"] | null;
+            /** Role Brief Version Id */
+            role_brief_version_id?: string | null;
             /**
              * Run Id
              * Format: uuid
@@ -150,6 +308,25 @@ export interface components {
             status_details: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * Severity
+         * @enum {string}
+         */
+        Severity: "material" | "minor";
+        /** SourceFact */
+        SourceFact: {
+            /** Source Refs */
+            source_refs: components["schemas"]["SourceRef"][];
+            /** Statement */
+            statement: string;
+        };
+        /** SourceRef */
+        SourceRef: {
+            /** Path */
+            path: string;
+            /** Quote */
+            quote: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -224,6 +401,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ScreeningRunStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_role_brief_api_v1_screening_runs__run_id__approve_role_brief_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApproveRoleBriefRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleBriefResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_role_brief_api_v1_screening_runs__run_id__role_brief_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleBriefResponse"];
                 };
             };
             /** @description Validation Error */
