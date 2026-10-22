@@ -58,7 +58,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-05 Requisition snapshot payload storage (dev / first release)
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user with defaults, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Phase 1 — Requisitions (`docs/DELIVERY_PLAN.md`, BE-1.2, BE-1.5)
 - **Decision:** Snapshot payloads go in a separate, restricted PostgreSQL table
@@ -75,7 +75,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-06 Background execution for the first release
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user with defaults, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Phase 1 — Requisitions (BE-1.3, BE-2.2)
 - **Decision:** The DB-backed state machine is driven by an in-process `RunExecutor`
@@ -92,7 +92,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-07 Requisition eligibility rules (rules version 1)
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user with defaults, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Phase 1 — Requisitions (BE-1.6, BE-1.7)
 - **Decision:** A requisition is eligible when all three conditions hold:
@@ -111,7 +111,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-08 Permission names and dev principal provider
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user with defaults, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Phase 1 — Requisitions (BE-0.7, BE-2.3, BE-2.4)
 - **Decision:** Permissions are named `<resource>:<action>`. This feature defines
@@ -126,7 +126,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-09 Row scoping for screening runs (business unit)
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user with defaults, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Phase 1 — Requisitions (BE-1.3, BE-1.7, BE-2.4)
 - **Decision:** `requisition` and `screening_run` carry `business_unit_key`, taken from
@@ -143,7 +143,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-10 `screening_run` schema deviations from Data Model §4.3
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user with defaults, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Phase 1 — Requisitions (BE-1.2)
 - **Decision:** These changes are additive to the spec.
@@ -164,7 +164,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-11 Screening-run API contract and feature flag
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user with defaults, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Phase 1 — Requisitions (BE-2.3, BE-2.4, BE-2.5)
 - **Decision:**
@@ -184,7 +184,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-12 Audit events: append-only enforcement and actor conventions
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user with defaults, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Phase 1 — Requisitions (BE-0.6, BE-1.7)
 - **Decision:**
@@ -204,7 +204,7 @@ every feature unless a later decision names an exception and the reason for it.
 
 ## D-13 Backend layout additions to the module shape
 
-- **Status:** Proposed — awaiting approval
+- **Status:** Accepted — approved by the user with defaults, 2026-10-22
 - **Date:** 2026-10-22
 - **Feature:** Phase 1 — Requisitions (BE-0.2, BE-1.4)
 - **Decision:** Cross-cutting infrastructure lives in `backend/app/core/` (`settings.py`,

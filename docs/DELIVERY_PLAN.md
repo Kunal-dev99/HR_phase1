@@ -5,7 +5,7 @@
 ## Feature: Phase 1 — Requisitions (requisition ingestion and screening run)
 
 - **Kickoff:** `docs/prompts/kickoffs/2026-10-22-phase1-requisitions.md`
-- **Plan status:** DRAFT, awaiting approval. Nothing may be built until it is approved.
+- **Plan status:** APPROVED by the user, 2026-10-22 — all defaults accepted (Q-1…Q-9 below), D-05…D-13 Accepted. Build one phase at a time.
 - **Plan author:** solution-architect, 2026-10-22
 - **Specs used:** System Design §5; Technical Architecture §2, §4.1–4.3, §5.1, §6.1–6.3,
   §8, §9, §14 Steps 2–3; Data Model §2, §4.1–4.3, §4.17–4.18, §6, §7.1, §8.
@@ -304,6 +304,8 @@ recovered as `blocked/ingestion_interrupted` the next time the flag is enabled.
 | PCS memory import | D-0 is still open. A checkpoint markdown is written under `docs/checkpoints/` after each phase. |
 
 ### Open questions for approval
+
+**Resolved 2026-10-22:** the user approved every default below. Q-8: Python 3.12 and PostgreSQL 16 are present in the cloud build container; confirm separately for local machines.
 
 - **Q-1** Approve or amend each PROPOSED decision D-05 to D-13 in `docs/DECISIONS.md`.
 - **Q-2** Does the platform serve several business units? Which HR System field will
