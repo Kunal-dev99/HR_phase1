@@ -415,3 +415,238 @@ recovered as `blocked/ingestion_interrupted` the next time the flag is enabled.
 - **Q-9** Should the response to an out-of-scope requisition stay indistinguishable from
   not found (`requisition_not_found`)? That is the default. The audit records the true
   reason code `requisition_not_accessible`.
+
+---
+
+## Feature: MVP UI — screening runs
+
+- **Kickoff:** `docs/prompts/kickoffs/2026-10-22-mvp-ui.md`
+- **Plan status:** PROPOSED — awaiting approval. D-20 is Accepted (user decisions).
+  D-21…D-25 are "Proposed — awaiting approval". The defaults below make the plan buildable.
+  If approval changes a default, I amend the affected tasks before the build starts.
+- **Plan author:** solution-architect, 2026-10-22
+- **Specs and decisions used:** Technical Architecture §2 (frontend: React + TypeScript),
+  §4.1, §6.1–6.2, §9. D-08 (dev principal headers), D-11 (API contract and flag), D-14
+  (no served OpenAPI), D-18 (MVP-light testing), D-20…D-25.
+- **Starting point:** No `frontend/` exists. `scripts/start-frontend.sh` and `.ps1` already
+  run `cd frontend && rm -rf .next && npm run dev -- --port <port>`. The backend has no
+  CORS middleware and serves no `/openapi.json` (D-14). Auth is `AUTH_MODE=dev_header`
+  (`X-Dev-Principal-Id`, `X-Dev-Permissions`, `X-Dev-Business-Units`). Mock fixtures
+  `REQ-OPEN-1`, `REQ-CLOSED-1` and `REQ-INCOMPLETE-1` are in business unit `bu-1`, and
+  `REQ-OTHER-BU-1` is in `bu-other`.
+- **API contract the UI builds against:** Requisitions Phase 2 BE-2.3 and BE-2.4 as
+  written above, plus D-11. POST `/api/v1/screening-runs` takes
+  `{"external_requisition_id"}` (1–128 chars, trimmed, extra fields forbidden) and returns
+  202 `{run_id, status, status_url, correlation_id}`. GET `/api/v1/screening-runs/{run_id}`
+  returns `run_id, status, phases, completion_reason, status_details, requisition,
+  started_at, completed_at, correlation_id`. Both routes exist only when
+  `FEATURE_SCREENING_RUNS=true`. Phase 2 is being built now in a separate worktree, so
+  this feature does not edit or tick anything in the Requisitions section.
+- **Task ID scheme:** plan phase numbers are one global sequence, so IDs never collide.
+  The Requisitions feature used Phases 0–2 (BE-0.x…BE-2.x). This feature uses
+  **Phase 3** and **Phase 4** (FE-3.x, BE-3.x, FE-4.x, BE-4.x). These are delivery-plan
+  phases. They are not the System Design "Phases 1–4" (role brief, 3A/3B and so on).
+  I did not use a `BE-UI.n` scheme because the ID rule is `BE-<phase>.<n>` with a phase
+  number.
+- **Testing level (D-18, MVP-light, user instruction):** `npm run build`, `npm run lint`
+  and `npm run typecheck` are mandatory for every FE task. Backend tasks keep `ruff check
+  .`, `mypy app` and `pytest`. Behaviour is checked with at most one manual check per
+  behaviour, as named in each Done-when. This feature adds no frontend test runner.
+  It has no migration, so there is no round trip to run.
+
+### Standing-rule compliance (applies to every task below)
+
+- **D-01:** Everything is new (`frontend/`, `backend/scripts/`, `backend/openapi.json`).
+  No backend route, schema or existing script changes. `scripts/start-frontend.*` stay
+  unchanged.
+- **D-02:** The screens are behind `NEXT_PUBLIC_FEATURE_SCREENING_RUNS` (default `false`).
+  The dev principal picker is behind `NEXT_PUBLIC_DEV_AUTH` (default `false`). The backend
+  flag `FEATURE_SCREENING_RUNS` still gates the API. The UI never deletes anything.
+- **D-03:** Each phase starts with its own worktree under `/home/user/HR_phase1-worktrees/`.
+  The backend used for manual checks runs from that worktree against the copy
+  `hr_phase1_mvpui_copy`. It never uses the live dev DB, and it never uses
+  `hr_phase1_p1req_copy` while the Requisitions Phase 2 build is using it.
+- **D-04:** The UI adds no endpoint. Every call goes to an existing backend route that
+  already declares its permission (`screening_run:create`, `screening_run:read`). Row
+  scoping stays in the backend repository. The UI hides nothing for security. It shows
+  the backend's 401/403/404 as messages.
+
+---
+
+### Phase 3 — Frontend foundation (scaffold, design system, API path, types, dev principal)
+
+Goal: a runnable Next.js app in `frontend/` that `scripts/start-frontend.*` start
+unchanged. It has the in-repo components, a same-origin proxy to the backend, generated
+API types and the dev-only principal picker. It has no screening-run screens yet.
+**Precondition:** none. It can be built in parallel with Requisitions Phase 2.
+
+- [ ] FE-3.1 Isolation setup (D-03). Create worktree
+  `/home/user/HR_phase1-worktrees/mvp-ui-phase3` on branch `feature/mvp-ui-phase3`, based
+  on the current reviewed integration branch (the branch holding Requisitions Phase 1).
+  Create the database `hr_phase1_mvpui_copy` and migrate it to that branch's head with
+  `backend/.env` in the worktree pointing at it.
+  Done-when: the report shows `git worktree list` with the Phase 3 path, `psql -l` listing `hr_phase1_mvpui_copy`, and `alembic current` on it.
+- [ ] BE-3.1 OpenAPI export script (**PROPOSED (D-23)**). Add
+  `backend/scripts/export_openapi.py`. It builds the app with
+  `create_app(Settings(DATABASE_URL=<placeholder>, ENVIRONMENT=development,
+  FEATURE_SCREENING_RUNS=True, HR_SYSTEM_ADAPTER="mock"))` so feature-flagged routes
+  appear. It does not run the lifespan and opens no DB connection. It writes
+  `app.openapi()` to `backend/openapi.json` as indented JSON with sorted keys, and the
+  file is committed. It mounts no route, so D-14 and the route audit are unchanged.
+  Done-when: `cd backend && python scripts/export_openapi.py` writes `backend/openapi.json` whose `paths` contain `/healthz`, and `ruff check .`, `mypy app` and `pytest` still pass.
+- [ ] FE-3.2 Scaffold `frontend/` (**D-20**, **PROPOSED (D-25)**). Use Next.js App Router
+  and TypeScript (`strict`), with `src/app/`, Tailwind CSS, ESLint (flat config with the
+  Next.js rules) and a committed `package-lock.json`. Use the current stable Next.js major
+  at scaffold time, and declare Node ≥ 20 in `engines`. Scripts: `dev`, `build`, `start`,
+  `lint` (ESLint CLI), `typecheck` (`tsc --noEmit`), `gen:api`. Add `frontend/.env.example`
+  with `BACKEND_URL=http://localhost:8000`, `NEXT_PUBLIC_DEV_AUTH=false` and
+  `NEXT_PUBLIC_FEATURE_SCREENING_RUNS=false`. `.env*.local` stays untracked. The home page
+  is a placeholder. `scripts/start-frontend.sh` and `.ps1` are not modified.
+  Done-when: `scripts/start-frontend.sh` serves the placeholder home page on http://localhost:3000 (manual check), and `npm run build`, `npm run lint` and `npm run typecheck` pass.
+- [ ] FE-3.3 Minimal design system (**D-20**). Tailwind theme tokens (colour, spacing,
+  radius, font sizes) go in `src/app/globals.css`. Add seven components in
+  `src/components/ui/`, exported from `index.ts`: `PageShell`, `Card`, `Button`,
+  `TextField`, `Alert` (info/success/warning/error), `StatusBadge` and `KeyValueList`.
+  Text is rendered as escaped data only, with no `dangerouslySetInnerHTML`. The
+  placeholder home page uses `PageShell` and `Card`.
+  Done-when: `npm run build`, `npm run lint` and `npm run typecheck` pass, and Grep shows no `dangerouslySetInnerHTML` under `frontend/src`.
+- [ ] FE-3.4 Same-origin API path and typed client (**PROPOSED (D-22)**, **PROPOSED
+  (D-23)**). In `next.config.ts`, rewrite `/api/v1/:path*` and `/healthz` to
+  `${BACKEND_URL}`, with default `http://localhost:8000`. `npm run gen:api` runs
+  `openapi-typescript ../backend/openapi.json -o src/api/schema.d.ts`, and the generated
+  file is committed and never hand-edited. `src/api/client.ts` is a thin `fetch` wrapper.
+  It returns `{ok: true, status, data, correlationId}` or `{ok: false, status, error,
+  correlationId}`, and network failures map to `status: 0`. No backend change and no CORS.
+  Done-when: with the backend running from the worktree, `curl -s http://localhost:3000/healthz` returns `{"status":"ok"}` through the proxy (manual check), and `npm run gen:api` followed by `git status` shows no diff in `src/api/schema.d.ts`.
+- [ ] FE-3.5 Dev-only principal picker (**PROPOSED (D-21)**). `src/dev-auth/` holds the
+  presets, stored in `localStorage`:
+  - "No principal" (the default; sends no headers);
+  - "Recruiter bu-1" (`screening_run:create,screening_run:read`, `bu-1`);
+  - "Viewer bu-1" (`screening_run:read`, `bu-1`);
+  - "Recruiter bu-other" (`screening_run:create,screening_run:read`, `bu-other`).
+
+  When `NEXT_PUBLIC_DEV_AUTH=true` and `NODE_ENV !== "production"`, the picker appears
+  in `PageShell` and the client adds the three `X-Dev-*` headers. Otherwise the client
+  sends no `X-Dev-*` header. `next.config.ts` throws during production build or production
+  server start when `NEXT_PUBLIC_DEV_AUTH=true`.
+  Done-when: `NEXT_PUBLIC_DEV_AUTH=true npm run build` exits non-zero with the D-21 message and `npm run build` with the flag unset passes; in `npm run dev` the picker is visible with the flag `true` and absent when it is unset (manual check).
+
+- [ ] **Phase 3 Done-when:** in the Phase 3 worktree, the engineers report real output with
+  every check passing: `npm run build`, `npm run lint`, `npm run typecheck` (frontend), and
+  `ruff check .`, `mypy app`, `pytest` (backend). `scripts/start-frontend.sh` serves the
+  home page. The `.ps1` script is unchanged, and the user checks it once on Windows
+  (Q-12).
+
+**Reversibility:** everything is new. Nothing in the backend imports `backend/scripts/` or
+reads `backend/openapi.json`. To roll back, remove the worktree or revert the branch.
+Without `frontend/`, `scripts/start-frontend.*` fail exactly as they do today. The dev
+picker is off by default, and production builds refuse it. No data or schema state is
+left behind.
+
+**Deferred from Phase 3:** frontend test runner (Vitest/Playwright, D-18); CI check that
+`openapi.json` and `schema.d.ts` match the code (hardening); served `/docs` (D-14); CSP
+and security headers (no hosting yet); dark mode and theming beyond the tokens.
+
+---
+
+### Phase 4 — Screening-run screens (start a run, run status with polling)
+
+Goal: the kickoff acceptance in a browser. (1) Start a run from an HR requisition ID.
+(2) A run status page that refreshes until `role_brief_draft` or `blocked`. (3) Clear
+401/403/404/422 messages.
+**Precondition:** Requisitions Phase 2 (BE-2.1…BE-2.6) is verified, ticked and merged
+into the integration branch, and Phase 3 is reviewed.
+
+- [ ] FE-4.1 Isolation setup (D-03). Create worktree
+  `/home/user/HR_phase1-worktrees/mvp-ui-phase4` on branch `feature/mvp-ui-phase4`, based
+  on the integration branch with Phase 3 and Requisitions Phase 2 merged. Migrate
+  `hr_phase1_mvpui_copy` to head.
+  Done-when: the report shows `git worktree list` with the Phase 4 path, and `alembic current` on `hr_phase1_mvpui_copy` shows `0002_requisitions (head)`.
+- [ ] BE-4.1 Re-export the OpenAPI schema with the Phase 2 routes. Run
+  `backend/scripts/export_openapi.py` and commit `backend/openapi.json`. There is no code
+  change.
+  Done-when: Grep shows `/api/v1/screening-runs` and `/api/v1/screening-runs/{run_id}` under `paths` in `backend/openapi.json`.
+- [ ] FE-4.2 Screening-run API functions. Run `npm run gen:api`. Add
+  `src/api/screening-runs.ts` with `createScreeningRun(externalRequisitionId)` and
+  `getScreeningRun(runId)`, typed only from `src/api/schema.d.ts`. Add
+  `src/api/messages.ts`, which maps responses to user messages:
+  - 401 "No signed-in user. Pick a dev principal.";
+  - 403 "You do not have permission (`<permission>`).";
+  - 404 on POST "Screening runs are not enabled on the backend.";
+  - 404 on GET, or 422 on GET for a malformed ID, "Run not found, or you cannot see it.";
+  - 422 on POST shows the server's field message(s) from `detail[].msg`;
+  - 0 or 5xx "Backend unavailable. Try again." with the correlation ID.
+
+  The `completion_reason` labels cover the D-07 codes, and an unknown code is shown raw.
+  Done-when: `npm run typecheck` passes and Grep finds no hand-written screening-run request/response type (`type|interface .*ScreeningRun`) under `frontend/src` outside `src/api/schema.d.ts`.
+- [ ] FE-4.3 Start-run page at `/` (behind `NEXT_PUBLIC_FEATURE_SCREENING_RUNS`; when it
+  is `false`, the page shows an info `Alert` "Screening runs are turned off"). The page
+  has one `TextField` (HR requisition ID, required, no client-side length cap so the
+  server's 422 is shown) and a `Button` that is disabled while submitting. On 202 it
+  navigates to `/screening-runs/<run_id>`. Errors appear in an `Alert` from FE-4.2.
+  Done-when: manual check against the Phase 4 backend: "Recruiter bu-1" + `REQ-OPEN-1` lands on `/screening-runs/<run_id>`; "No principal" shows the 401 message; "Viewer bu-1" shows the 403 message; a 129-character ID shows the server's 422 message.
+- [ ] FE-4.4 Run status page `/screening-runs/[runId]` (same flag). It shows:
+  - a `StatusBadge` for `status` and one for `phases.phase_1`;
+  - the `completion_reason` label and `status_details.missing_fields` when present;
+  - the pinned requisition (`external_requisition_id`, `hr_system_key`, `requisition_id`,
+    `snapshot_id`, `payload_hash`, `captured_at`), or "Not pinned yet / not pinned";
+  - `started_at`, `completed_at` and `correlation_id`;
+  - a manual "Refresh" button.
+
+  Polling follows **PROPOSED (D-24)**. Errors use the FE-4.2 messages, and the raw
+  snapshot payload is never requested or shown.
+  Done-when: manual check: a `REQ-OPEN-1` run shows `role_brief_draft`, phase 1 `in_progress` and the pinned requisition, and the backend `app.request` log shows no further GETs for that run after the status is reached; a `REQ-CLOSED-1` run shows `blocked` with the `requisition_not_eligible_status` label; the same `REQ-OPEN-1` URL opened with "Recruiter bu-other" shows the not-found message.
+
+- [ ] **Phase 4 Done-when:** in the Phase 4 worktree, `npm run build`, `npm run lint` and
+  `npm run typecheck` pass. Backend `ruff check .`, `mypy app` and `pytest` pass. One
+  manual walkthrough covers acceptance (1)–(3), and the report includes screenshots or a
+  console excerpt. The backend is started with `scripts/start-backend.sh` from the
+  worktree (`FEATURE_SCREENING_RUNS=true`, `AUTH_MODE=dev_header`,
+  `HR_SYSTEM_ADAPTER=mock`, DB `hr_phase1_mvpui_copy`). The frontend is started with
+  `scripts/start-frontend.sh` (`NEXT_PUBLIC_DEV_AUTH=true`,
+  `NEXT_PUBLIC_FEATURE_SCREENING_RUNS=true`).
+
+**Reversibility:** `NEXT_PUBLIC_FEATURE_SCREENING_RUNS=false` (the default) turns the
+screens into an "off" notice. Backend `FEATURE_SCREENING_RUNS=false` unmounts the API, and
+the UI then shows "not enabled". There is no migration. Runs started through the UI are
+ordinary runs created by the existing API. They stay in the copy DB and are never deleted.
+Reverting the branch removes the pages and leaves the Phase 3 foundation.
+
+**Deferred from Phase 4:**
+- List-all-runs page. No list endpoint exists. Adding one is additive, but it needs a
+  scoped repository list query, a permission, pagination and its own BE tasks, so it is
+  not trivial. It goes to the next UI feature.
+- Server push (SSE/WebSocket) instead of polling.
+- Accessibility audit, i18n, and a design pass on the in-repo components.
+
+### Feature-level deferred list (MVP UI)
+
+| Item | Reason |
+|---|---|
+| Hosting / deployment of the frontend | User decision (D-20): local dev only. |
+| Production SSO / login page | Out of scope. The dev picker is the only principal source, and production builds refuse it (D-21). |
+| Role brief, candidates, evaluation, shortlist screens | Out of scope per kickoff. Their backend modules do not exist yet. |
+| List-all-runs page | No backend endpoint (see Phase 4 deferred). |
+| Frontend automated tests, OpenAPI drift check in CI | D-18 MVP-light. Revisit with D-18 before pilot. |
+| CORS on the backend | Not needed with the same-origin proxy (D-22). |
+| Any change to `Extension/` | Out of scope per kickoff. |
+
+### Open questions for approval (MVP UI)
+
+Numbered from Q-10 so they do not collide with the Requisitions Q-1…Q-9.
+
+- **Q-10** Approve or amend D-21…D-25 (defaults above).
+- **Q-11** Toolchain on local machines: Node ≥ 20 LTS and npm (the start scripts already
+  use `npm`). Is pnpm or yarn wanted instead? The default is npm.
+- **Q-12** `scripts/start-frontend.ps1` cannot be run in the Linux build container. Will
+  you check it once on Windows after Phase 3? It is unchanged by this plan.
+- **Q-13** Are the four dev principal presets (FE-3.5) enough, or do you also want free-text
+  fields for ID, permissions and business units? The default is presets only.
+- **Q-14** Should the start form be the home page `/`? The alternative is
+  `/screening-runs/new` with `/` as a landing page. The default is `/`.
+- **Q-15** Sequencing: Phase 3 can start now. Phase 4 waits for Requisitions Phase 2 to be
+  verified and merged. Do you confirm?
+- **Q-16** `.claude/agents/frontend-engineer.md` still says "align to the design system
+  bundle". Under D-20 the in-repo `frontend/src/components/ui/` set is that design system.
+  The agent file is outside the architect's ownership. Should its owner update the wording
+  to point at D-20?
