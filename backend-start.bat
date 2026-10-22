@@ -10,7 +10,8 @@ rem   2. backend\.env exists and DATABASE_URL is filled in.
 rem   3. backend\.venv exists (created on first run).
 rem   4. Dependencies match requirements-dev.lock (re-installed when the lock changes).
 rem   5. Settings are valid, DATABASE_URL is a *_copy / *_test database (D-03),
-rem      and PostgreSQL accepts a connection.
+rem      and the database is reachable: SQLite (default) - the folder is writable and
+rem      SQLite is 3.35+; PostgreSQL (alternative) - the server accepts a connection.
 rem   6. Migrations are at head (alembic upgrade head - additive, D-01).
 rem   7. Any orphan process holding the port is stopped (uvicorn --reload leaves trees).
 rem   8. uvicorn starts with --reload and --no-access-log.
@@ -57,9 +58,12 @@ rem --- 2. backend\.env ------------------------------------------------------
 if not exist "%BACKEND%\.env" (
     copy /y "%BACKEND%\.env.example" "%BACKEND%\.env" >nul
     echo [x] backend\.env did not exist, so it was created from .env.example.
-    echo     Open backend\.env, set DATABASE_URL to your database COPY, e.g.
+    echo     The default DATABASE_URL is a local SQLite file ^(no database install needed^):
+    echo       sqlite+aiosqlite:///./hr_phase1_dev_copy.db
+    echo     To use PostgreSQL instead, set DATABASE_URL to your database COPY, e.g.
     echo       postgresql+asyncpg://hr_app:YOUR_PASSWORD@localhost:5432/hr_phase1_dev_copy
-    echo     then run this again. The database name must end in _copy or _test.
+    echo     Check backend\.env, then run this again.
+    echo     The database name ^(or SQLite file name^) must end in _copy or _test.
     goto :fail
 )
 findstr /c:"<password>" "%BACKEND%\.env" >nul && (
@@ -96,12 +100,13 @@ if not defined FEATURE_SCREENING_RUNS set "FEATURE_SCREENING_RUNS=true"
 if not defined AUTH_MODE set "AUTH_MODE=dev_header"
 if not defined HR_SYSTEM_ADAPTER set "HR_SYSTEM_ADAPTER=mock"
 
-rem --- 5. settings, database copy guard, PostgreSQL connection -------------
+rem --- 5. settings, database copy guard, database reachable -----------------
 pushd "%BACKEND%"
 "%VENV_PY%" scripts\dev_precheck.py
 if errorlevel 1 (
     popd
-    echo     Is PostgreSQL running? Does the database in DATABASE_URL exist? Create it with e.g.
+    echo     SQLite ^(default^): does the folder of the .db file exist and is it writable?
+    echo     PostgreSQL: is the server running? Does the database in DATABASE_URL exist? e.g.
     echo       psql -U postgres -c "CREATE DATABASE hr_phase1_dev_copy OWNER hr_app;"
     goto :fail
 )

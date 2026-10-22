@@ -17,3 +17,9 @@ backend/.venv/
 
 # Logs
 *.log
+
+# Local SQLite database files (D-26)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
