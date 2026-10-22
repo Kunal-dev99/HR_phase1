@@ -1461,3 +1461,217 @@ Phase 5 (Q-21) was run once by the orchestrator on the current code (Phase 6 wor
 (all 10 `pg_only` tests ran); `alembic upgrade head` → `downgrade -1` → `upgrade head`
 clean, `current` = `0003_role_briefs (head)`. The offline-SQL byte-diff against the
 pre-Phase-5 baseline was not taken (no baseline exists) and stays deferred.
+
+---
+
+## Feature: Candidates (3A) — applicant import
+
+- **Kickoff:** `docs/prompts/kickoffs/2026-10-22-candidates-3a.md`
+- **Plan status:** PROPOSED by the solution-architect, 2026-10-22 — awaiting user approval.
+  D-41 records the user's choices (Accepted); D-42…D-47 are Proposed defaults so the plan
+  can be built. Build one phase at a time (D-18: small, minimal testing, speed).
+- **Plan author:** solution-architect, 2026-10-22
+- **Specs used:** System Design §7.1 (3A), §7.3 (identity); Technical Architecture §4.3
+  (applicants/identity modules), §5.3, §6.1, §9 (PII); Data Model §4.6 (`candidate`),
+  §4.7 (`candidate_source_record`), §4.8 (`candidate_profile_field`), §7.2, §8.
+- **Decisions relied on:** D-06, D-08, D-09, D-11, D-12, D-13, D-18, D-20, D-24, D-26, D-28,
+  D-32, D-38, D-40, and the new D-41…D-47.
+- **Starting point (verified 2026-10-22):** migrations stop at `0003_role_briefs`;
+  `candidate` and `candidate_source_record` do **not** exist yet (created in `0004`).
+  `RunStatus` already defines `role_configuration`, `sourcing`, `candidate_pool_ready`
+  (`backend/app/modules/requisitions/constants.py`). After role-brief approval
+  (`RoleBriefService.approve`) the run is in `role_configuration`. The mock HR adapter and
+  fixtures live in `backend/app/modules/integrations/adapters/hr_system/`. The executor
+  chain is composed in `app/main.py` (`chain_run_handlers`) and run per `RunHandler`
+  (`requisitions/service.py`). Phases 6–7 (role brief) are the pattern this feature mirrors.
+- **Feature flags (reversibility, D-02):** backend `FEATURE_APPLICANT_SOURCING` (default
+  `false`, requires `FEATURE_SCREENING_RUNS=true`); frontend `NEXT_PUBLIC_FEATURE_CANDIDATES`
+  (default `false`). Off restores today's behaviour exactly.
+
+### Standing-rule compliance (applies to every task below)
+
+- **D-01:** `0004` only adds tables, indexes and constraints; drops happen only in
+  `downgrade()`. No existing table, column, endpoint or page is altered destructively.
+- **D-02:** `0004` ships a tested downgrade and a round-trip test. Sourcing and the UI sit
+  behind flags that default off. Import failures block the run; nothing is deleted.
+- **D-03:** Each phase starts with its own worktree outside `/home/user/HR_phase1`, against a
+  database copy.
+- **D-04:** The candidates endpoint names its permission (`screening_run:read`). Candidate
+  rows are scoped in the repository by their run's business unit (reusing
+  `principal_scope_filter`), derived from the principal only.
+- **D-28:** Code and `0004` stay dialect-neutral; tests run on PostgreSQL (default, D-40) or
+  SQLite (D-26).
+
+### Status flow added by this feature (Data Model §7.1 subset)
+
+```
+role_configuration ──claim──▶ sourcing ──imported (N≥0)──▶ candidate_pool_ready
+        │                        │
+        │                        └──adapter failure / malformed applicant──▶ blocked (+ completion_reason)
+        └ (reached when the role brief is approved, D-32/D-38; Phase 2 role-config intelligence is unbuilt and skipped)
+```
+
+---
+
+### Phase 8 — Backend: applicants module, mock applicant adapter, migration 0004, import service, GET candidates
+
+Goal: after the role brief is approved, import the requisition's applicants from the mock
+adapter into a candidate pool (`candidate` + `candidate_source_record`), move the run
+`role_configuration → sourcing → candidate_pool_ready`, and serve the pool over HTTP. All
+behind `FEATURE_APPLICANT_SOURCING` (default off).
+
+- [ ] BE-8.1 Isolation setup (D-03). Create worktree
+  `/home/user/HR_phase1-worktrees/candidates-phase8` on a branch off `master` (role brief
+  Phase 6 already merged). Create a database copy and migrate it to `0003_role_briefs`.
+  Done-when: the report shows `git worktree list` with the Phase 8 path and `alembic current`
+  showing `0003_role_briefs (head)` on the copy.
+- [ ] BE-8.2 Settings, feature flag and env example (D-02, mirrors D-32). In
+  `app/core/settings.py` add `FEATURE_APPLICANT_SOURCING` (default `false`) and validate it
+  requires `FEATURE_SCREENING_RUNS=true`; reuse `HR_SYSTEM_ADAPTER` for the applicant source
+  (D-44). Add the flag to `backend/.env.example` (commented, default off).
+  Done-when: `tests/test_settings.py::test_applicant_sourcing_requires_screening_runs` asserts
+  the default is `false` and that enabling it without `FEATURE_SCREENING_RUNS` raises.
+- [ ] BE-8.3 Mock applicant adapter + fixtures (D-44, D-13). Add `list_applicants(external_requisition_id)`
+  to the HR adapter contract (`adapters/hr_system/base.py`) and `MockHRSystemAdapter`, plus
+  an `ApplicantPayload` schema (name, headline, skills, years_experience, education, cv_text,
+  `external_application_id`). Add fixtures under
+  `adapters/hr_system/fixtures/applicants/`: `REQ-OPEN-1.json` (N full applicants),
+  `REQ-EMPTY-1.json` (empty list), `REQ-APPLICANTS-MALFORMED.json` (one malformed applicant).
+  Field locations only in errors (no PII in messages), like `get_requisition`.
+  Done-when: `tests/test_applicant_adapter.py::test_mock_lists_and_rejects_malformed` asserts
+  REQ-OPEN-1 returns N validated `ApplicantPayload`s and the malformed fixture raises
+  `InvalidHRResponse`.
+- [ ] BE-8.4 Migration `0004_candidates` and models (D-01, D-02, D-28, D-47). Create
+  `candidate` (§4.6: `identity_status`, timestamps), `candidate_source_record` (§4.7:
+  `candidate_id` FK, `screening_run_id` FK, `source_type`, `source_system_key`,
+  `external_application_id`, `payload_reference`, `payload_hash`, `normalization_status`,
+  timestamps) and `candidate_source_payload` (restricted JSONB + `payload_hash`, mirroring
+  `requisition_snapshot_payload`, D-05). Dialect-aware like `0003`. No new DB CHECK on
+  statuses (additive, D-10). `downgrade()` drops only what it created.
+  Done-when: the Alembic round trip `upgrade head → downgrade -1 → upgrade head` is clean and
+  `tests/test_migration_0004.py::test_candidates_round_trip` passes on the phase copy.
+- [ ] BE-8.5 `applicants` module models + scoped repositories (D-04, D-09, D-43, D-47). Add
+  `backend/app/modules/applicants/` (standard seven files). `CandidateRepository` /
+  `CandidateSourceRecordRepository` plus a `CandidateSourcePayloadStore` (mirrors
+  `DbSnapshotStore`). `list_for_run(run_id, principal)` joins `screening_run` and reuses
+  `principal_scope_filter` so rows are visible only within the principal's scope.
+  Done-when: `tests/test_candidate_repository.py::test_list_for_run_is_scoped` asserts a
+  candidate whose run is out of the principal's business unit is not returned.
+- [ ] BE-8.6 Sourcing/import service + executor wiring (D-42, D-32 pattern). Add
+  `ApplicantSourcingService` with a `source(run_id)` `RunHandler`: a no-op unless the run is
+  in `role_configuration` with no candidates; otherwise claim `role_configuration → sourcing`,
+  call `list_applicants` (recorded as an `integration_attempt`, operation
+  `list_applicants`), snapshot each applicant payload (hash + reference, D-47), insert one
+  `candidate` (1:1) and one `candidate_source_record` (`source_type=hr_applicant`) per
+  applicant, then transition `sourcing → candidate_pool_ready` (count may be 0). An empty
+  list still reaches `candidate_pool_ready`; an adapter failure or malformed applicant blocks
+  the run (`sourcing_source_unavailable` / `sourcing_source_invalid`). Chain the handler after
+  the role-brief handler in `app/main.py` (no-op on first dispatch), and re-`dispatch` the run
+  from the approve-role-brief flow after its commit (D-42). No applicant PII in logs/audit.
+  Done-when: `tests/test_applicant_sourcing.py::test_import_moves_run_to_pool_ready` uses the
+  MOCK adapter to run `source` on a run seeded in `role_configuration` and asserts the run is
+  `candidate_pool_ready` with N `candidate` + N `candidate_source_record` rows carrying a
+  `payload_hash`.
+- [ ] BE-8.7 `GET /api/v1/screening-runs/{run_id}/candidates` (D-04, D-11, D-46). Permission
+  `screening_run:read`; run loaded via `get_for_principal` (404 when missing/out of scope);
+  paginated `{items, total}` where each item has `candidate_id`, `name`, `headline`,
+  `top_skills`, `years_experience`, `education` (loaded from the hash-verified payload).
+  Mounted only when `FEATURE_APPLICANT_SOURCING=true`.
+  Done-when: `tests/test_candidates_api.py::test_list_candidates_scoped` asserts 200 with the
+  pool for an in-scope reader, 404 for an out-of-scope run, and 403 without the permission.
+- [ ] BE-8.8 OpenAPI re-export (D-23). In `backend/scripts/export_openapi.py` pin
+  `FEATURE_APPLICANT_SOURCING=true`; regenerate `backend/openapi.json`.
+  Done-when: `backend/openapi.json` contains `/api/v1/screening-runs/{run_id}/candidates` and
+  the `CandidateListResponse` schema.
+- [ ] BE-8.9 Manual mock smoke (end of Phase 8, D-18 "one real-ish mock smoke"). On the copy
+  with the mock adapters and both flags on: start a run for REQ-OPEN-1, approve its role
+  brief, and confirm the pool imports; repeat with REQ-EMPTY-1 (→ `candidate_pool_ready`,
+  count 0) and REQ-APPLICANTS-MALFORMED (→ `blocked`). Report real output.
+  Done-when: the report shows the three runs reaching `candidate_pool_ready` (N / 0) and
+  `blocked` respectively.
+- [ ] **Phase 8 Done-when:** in the Phase 8 worktree against the copy, the engineer reports
+  real output for `ruff check`, `mypy app`, `pytest`, the `0004` round trip
+  (`upgrade head → downgrade -1 → upgrade head`), and the BE-8.9 smoke.
+
+**Reversibility (Phase 8):** `FEATURE_APPLICANT_SOURCING=false` leaves the sourcing handler
+out of the chain, mounts no candidates route, and re-dispatch after approval is a no-op, so
+the run stops at `role_configuration` exactly as today. `0004` downgrade drops the three new
+tables and restores `0003_role_briefs`. Imported candidates and runs are never deleted; a
+failed import blocks the run (hidden, not deleted).
+
+**Deferred from Phase 8:** identity resolution / dedup and `candidate_profile_field`
+(separate `identity` module, D-43/Q-32); proactive discovery (3B); evidence extraction and
+scoring (next feature); CV file upload (mock supplies `cv_text` inline); a `phases.phase_3`
+field in the run status response (D-45/Q-33); a dedicated `POST …/source-applicants`
+endpoint (D-42/Q-30); app-level encryption of candidate payloads (Q-34).
+
+---
+
+### Phase 9 — Frontend: candidate list on the run status page (behind a flag)
+
+**Precondition:** Phase 8 verified, ticked and merged to `master`.
+
+- [ ] FE-9.1 Isolation setup (D-03). Create worktree
+  `/home/user/HR_phase1-worktrees/candidates-phase9` off `master` with Phase 8 merged.
+  Migrate the frontend's backend copy to `0004`.
+  Done-when: the report shows `git worktree list` with the Phase 9 path and `alembic current`
+  showing `0004_candidates (head)`.
+- [ ] FE-9.2 API function and messages (D-23). Run `npm run gen:api`. Add `getCandidates(runId)`
+  to `src/api/screening-runs.ts` and any labels to `src/api/messages.ts`.
+  Done-when: `npm run gen:api` regenerates `src/api/schema.d.ts` with the candidates path and
+  `npm run typecheck` passes.
+- [ ] FE-9.3 UI flag (D-25, D-02, D-46). Add `isCandidatesEnabled()` to `src/features.ts`
+  reading `NEXT_PUBLIC_FEATURE_CANDIDATES` (default `false`). No new dev preset: reading the
+  pool uses the existing `screening_run:read`, so the current presets suffice.
+  Done-when: `tests`/manual check shows the candidate section is hidden when the flag is off.
+- [ ] FE-9.4 Candidate list on the run status page (D-20, D-24/D-38). Behind the flag, when the
+  run is `candidate_pool_ready`, fetch and render a `Card` with the pool count and, per
+  candidate, name, headline, top skills, years of experience and education — all as escaped
+  text (React default; no `dangerouslySetInnerHTML`, D-35). Add `candidate_pool_ready` to the
+  polling stopping statuses only when the flag is on (additive to D-24/D-38).
+  Done-when: `npm run build`, `npm run lint` and `npm run typecheck` pass and the section
+  renders the list for a `candidate_pool_ready` run.
+- [ ] FE-9.5 Browser walkthrough (end of Phase 9, D-18 "one browser walkthrough"). With both
+  flags on and the backend serving the mock pool, load a `candidate_pool_ready` run and
+  confirm the count and candidate fields render. Report what was seen.
+  Done-when: the report describes the rendered candidate list for a real backend run.
+- [ ] **Phase 9 Done-when:** in the Phase 9 worktree, `npm run build`, `npm run lint` and
+  `npm run typecheck` pass, and the FE-9.5 walkthrough is reported.
+
+**Reversibility (Phase 9):** `NEXT_PUBLIC_FEATURE_CANDIDATES=false` hides the candidate
+section and leaves D-24/D-38 polling unchanged. No backend change; no schema change.
+
+**Deferred from Phase 9:** a candidate detail page; filtering/sorting the pool; showing
+source provenance / raw payload; infinite scroll (simple pagination only).
+
+### Feature-level deferred list (Candidates 3A)
+
+| Deferred | Reason |
+|---|---|
+| Identity resolution, dedup, `candidate_profile_field`, separate `identity` module | Kickoff out of scope; candidate is 1:1 with the applicant for the MVP (D-43, Q-32). |
+| Proactive discovery (3B) | Kickoff out of scope. |
+| Evidence extraction and scoring | Next feature. |
+| CV file upload | Mock supplies `cv_text` inline. |
+| `phases.phase_3` in the run status response | Kept additive for later (D-45, Q-33). |
+| `POST …/source-applicants` on-demand endpoint | Automatic trigger chosen (D-42, Q-30). |
+| App-level encryption / retention policy for candidate payloads | Dev DB, like D-05 (Q-34). |
+| PostgreSQL vs SQLite re-verification depth | Tests run on either (D-28); full PostgreSQL run is the D-40 gate. |
+
+### Open questions for approval (Candidates 3A)
+
+Numbered from Q-29 so they do not collide with Q-1…Q-28.
+
+- **Q-29** Approve or amend D-42…D-47 (defaults are in `docs/DECISIONS.md`).
+- **Q-30** Sourcing trigger: re-`dispatch` the run through the executor after role-brief
+  approval (chosen default, D-42), a dedicated `POST …/source-applicants`, or run
+  automatically whenever a run is observed in `role_configuration`?
+- **Q-31** Mock fixtures: how many applicants per requisition (default N=5 for REQ-OPEN-1),
+  and which requisitions get an applicant fixture?
+- **Q-32** Build a separate `identity` module with dedup / `candidate_profile_field` now, or
+  defer it (default: defer; candidate 1:1 applicant)?
+- **Q-33** Add a `phases.phase_3` field to the run status response now, or defer (default:
+  defer; the `candidate_pool_ready` status plus the candidates endpoint are enough)?
+- **Q-34** PII: candidate names and `cv_text` are the first personal data. Is storing them in
+  the dev DB unencrypted (mirroring D-05) acceptable until retention/residency (Data Model §9)
+  is decided?
+- **Q-35** Pagination defaults and the maximum page size for the candidates endpoint.

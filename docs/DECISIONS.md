@@ -811,4 +811,143 @@ every feature unless a later decision names an exception and the reason for it.
 
 ---
 
+## D-41 Candidates (3A) scope: full fields, backend import + UI, mock adapter
+
+- **Status:** Accepted — user decisions, 2026-10-22
+- **Date:** 2026-10-22
+- **Feature:** Candidates (3A) (`docs/DELIVERY_PLAN.md`, Phases 8–9; kickoff
+  `docs/prompts/kickoffs/2026-10-22-candidates-3a.md`)
+- **Decision:**
+  1. **Full candidate fields.** Each imported applicant is a full record — name, headline,
+     skills, years of experience, education and CV-style text (`cv_text`) — using the generic
+     `candidate` shape (Data Model §4.6/§4.7), not a student-only shape.
+  2. **Both backend and UI.** Deliver the backend applicant import (Phase 8) and a UI
+     candidate list on the run status page (Phase 9).
+  3. **Mock adapter only.** The applicant source is a fixture-backed mock, like the HR
+     requisition mock. No real HR applicant API is called.
+  4. **Testing:** D-18 MVP-light — one focused test per Done-when behaviour against the mock,
+     one mock smoke at the end of Phase 8, one browser walkthrough at the end of Phase 9.
+  5. **Demo target:** laptop; PostgreSQL default (D-40), SQLite still supported (D-26/D-28).
+- **Reason:** User instruction, recorded verbatim from the 2026-10-22 kickoff.
+
+## D-42 Sourcing trigger and execution (mirrors D-32)
+
+- **Status:** Proposed — awaiting approval, 2026-10-22
+- **Date:** 2026-10-22
+- **Feature:** Candidates (3A) (BE-8.6)
+- **Decision:** Import is automatic, not an endpoint. `ApplicantSourcingService.source` is a
+  `RunHandler` chained after the role-brief handler in `app/main.py` (D-39 composition). It is
+  a no-op unless the run is in `role_configuration` with no candidates. Because role-brief
+  approval happens in a later HTTP request (`RoleBriefService.approve`, which commits
+  `awaiting_role_approval → role_configuration`), the approve flow re-`dispatch`es the run
+  through the `RunExecutor` after its commit (the pattern `ScreeningRunService.start` already
+  uses: dispatch only after commit). On that dispatch the ingest and role-brief steps are
+  no-ops and `source` runs. It claims `role_configuration → sourcing`, calls `list_applicants`
+  (one `integration_attempt`, D-06 single attempt), imports the applicants, then transitions
+  `sourcing → candidate_pool_ready` — reaching `candidate_pool_ready` even when the list is
+  empty (count 0). An adapter failure or a malformed applicant blocks the run with a new
+  public `completion_reason` (`sourcing_source_unavailable` / `sourcing_source_invalid`),
+  mirroring ingestion (D-07) and role-brief failure (D-33). Each status change and its audit
+  event share one unit of work (D-12); the adapter call is outside any open transaction
+  (D-32). Behind `FEATURE_APPLICANT_SOURCING` (default off). Startup recovery of runs stuck in
+  `sourcing` is not added (follows D-32's choice not to add `role_brief_draft` recovery).
+- **Reason:** It reuses the existing executor and the conditional-transition double-dispatch
+  safety (D-06) without a queue, and keeps the trigger deterministic (Phase 2 role-config
+  intelligence is unbuilt, so `role_configuration` is passed straight through).
+- **Alternatives:** (a) a dedicated `POST …/source-applicants` endpoint (one more route and
+  permission); (b) a background scan that sources any run found in `role_configuration` (needs
+  a poller). See Q-30.
+
+## D-43 Single `applicants` module owns the candidate pool for the MVP (defers `identity`)
+
+- **Status:** Proposed — awaiting approval, 2026-10-22
+- **Date:** 2026-10-22
+- **Feature:** Candidates (3A) (BE-8.5, BE-8.7)
+- **Decision:** For the MVP one module, `backend/app/modules/applicants/` (standard seven
+  files), owns `candidate`, `candidate_source_record`, `candidate_source_payload`, the import
+  service and the `GET …/candidates` endpoint. The separate `identity` module in the
+  ARCHITECTURE module map, identity resolution / dedup, and `candidate_profile_field`
+  (Data Model §4.8) are deferred: a `candidate` is created 1:1 with each applicant,
+  `identity_status` defaults to a single value, and no cross-source matching runs.
+- **Reason:** The kickoff defers dedup and identity resolution. One module avoids a premature
+  split while the only source is HR applicants. ARCHITECTURE is updated to match (D-01
+  additive: the `identity` row is folded, not removed from the data model).
+- **Alternatives:** build `identity` now as a second module (more structure, unused dedup).
+  See Q-32.
+
+## D-44 Mock applicant adapter location and fixture set
+
+- **Status:** Proposed — awaiting approval, 2026-10-22
+- **Date:** 2026-10-22
+- **Feature:** Candidates (3A) (BE-8.2, BE-8.3)
+- **Decision:** The applicant source extends the existing HR adapter rather than adding a new
+  provider: `list_applicants(external_requisition_id) -> list[ApplicantPayload]` is added to
+  the HR adapter contract and `MockHRSystemAdapter`, recorded under `integration_name=hr_system`,
+  operation `list_applicants`. `HR_SYSTEM_ADAPTER` selects it; no new adapter setting. Fixtures
+  live in `adapters/hr_system/fixtures/applicants/`: `REQ-OPEN-1.json` (N full applicants, default
+  N=5), `REQ-EMPTY-1.json` (empty list, for the pool-ready-count-0 path) and
+  `REQ-APPLICANTS-MALFORMED.json` (one malformed applicant, for the blocked path). Requested IDs
+  are dictionary keys only, never path segments (as `get_requisition`); error messages carry
+  field locations only, never applicant content.
+- **Reason:** 3A applicants come from the HR System, so they belong to the HR adapter. Reusing
+  it avoids a second adapter setting and a second mock. The three fixtures cover the happy,
+  empty and malformed paths named in the Done-when lines.
+- **Alternatives:** a separate `adapters/hr_applicants/` provider with its own setting (D-13
+  allows it) — more surface for no MVP benefit. See Q-31.
+
+## D-45 Candidate-pool phase mapping: no new `phases` field yet
+
+- **Status:** Proposed — awaiting approval, 2026-10-22
+- **Date:** 2026-10-22
+- **Feature:** Candidates (3A) (BE-8.6, BE-8.7)
+- **Decision:** The run status response keeps `phases.phase_1` only (D-11, D-38). The candidate
+  pool is surfaced through the `candidate_pool_ready` run status and the `GET …/candidates`
+  endpoint, not a new `phases.phase_3` field. `candidate_pool_ready` already maps `phase_1` to
+  `completed` (D-38). A `phases.phase_3` field stays available to add additively later.
+- **Reason:** It is the smallest change (D-18) and keeps the status contract stable. Adding a
+  phase field now would commit a shape before the sourcing/evaluation phases are built.
+- **Alternatives:** add `phases.phase_3` (`pending`/`in_progress`/`completed`/`blocked`) now.
+  See Q-33.
+
+## D-46 Reading candidates reuses `screening_run:read`
+
+- **Status:** Proposed — awaiting approval, 2026-10-22
+- **Date:** 2026-10-22
+- **Feature:** Candidates (3A) (BE-8.7, FE-9.3)
+- **Decision:** `GET /api/v1/screening-runs/{run_id}/candidates` requires the existing
+  `screening_run:read` (D-08): whoever can see the run can see its candidate pool. The run is
+  loaded via `get_for_principal`, so a missing or out-of-scope run returns 404 (D-09). Candidate
+  rows are additionally scoped in the repository by their run's business unit. No new
+  permission and no new dev preset are introduced (the role-brief read reuse, D-34, is the
+  precedent).
+- **Reason:** It mirrors D-34 (brief read reuses `screening_run:read`) and needs no change to
+  the presets. A separate `candidate:read` would have to be added to every preset.
+- **Alternatives:** a dedicated `candidate:read` permission. See Q-29.
+
+## D-47 Candidate payload storage mirrors the requisition snapshot (D-05); PII handling
+
+- **Status:** Proposed — awaiting approval, 2026-10-22
+- **Date:** 2026-10-22
+- **Feature:** Candidates (3A) (BE-8.4, BE-8.5, BE-8.6)
+- **Decision:** Each applicant's full payload is stored in a separate, restricted table
+  `candidate_source_payload` (JSONB), behind a store interface, exactly as
+  `requisition_snapshot_payload` (D-05). `candidate_source_record.payload_reference` holds
+  `db:candidate_source_payload:<uuid>` and `payload_hash` is `sha256:<hex>` over canonical JSON
+  (sorted keys, UTF-8, compact separators), recomputed and checked on every read. The `candidate`
+  row holds only §4.6 fields (identity + timestamps); displayable PII (name, headline, skills,
+  experience, education, `cv_text`) lives only in the hashed payload. The `GET …/candidates`
+  endpoint loads the hash-verified payload and returns the display fields to authorized,
+  scoped readers. Applicant PII never enters logs, audit `details`, exception messages or
+  `integration_attempt` rows (Tech Arch §9); the UI renders every field as escaped text
+  (no `dangerouslySetInnerHTML`, D-35/D-20). No app-level encryption in dev; object storage and
+  encryption plug in behind the same interface later, as for D-05.
+- **Reason:** It reuses the proven D-05 pattern (transactional, hash-verified, tested
+  downgrade, no new infrastructure) and keeps personal data in one restricted place instead of
+  spread across columns. Retention/residency (Data Model §9) stays open (Q-34).
+- **Alternatives:** denormalize PII onto `candidate`/`candidate_source_record` columns (more
+  copies of personal data) or add `candidate_profile_field` per-field provenance now (deferred,
+  D-43).
+
+---
+
 Never renumber existing IDs. New decisions are appended as D-05, D-06, …

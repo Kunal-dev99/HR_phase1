@@ -59,9 +59,9 @@ model §4.
 | `requisitions` | `requisition`, `requisition_snapshot`, `screening_run` | `POST /screening-runs`, `GET /screening-runs/{run_id}` |
 | `role_briefs` | `role_brief_version` | `GET /screening-runs/{run_id}/role-brief` (`screening_run:read`), `POST /screening-runs/{run_id}/approve-role-brief` (`role_brief:approve`); generation is an executor step after ingestion via the AI gateway (D-32, D-34; Phase 6 planned) |
 | `role_models` | `role_configuration_version` | `POST /screening-runs/{run_id}/approve-configuration` |
-| `applicants` (3A) | `candidate_source_record` (source = HR) | — (workflow step) |
+| `applicants` (3A) | `candidate`, `candidate_source_record` (source = HR), `candidate_source_payload` | `GET /screening-runs/{run_id}/candidates` (`screening_run:read`, D-46). Import is an executor step chained after role-brief approval (D-42; Phase 8 planned); tables arrive in migration `0004_candidates`. For the MVP this module also owns `candidate` (D-43). Behind `FEATURE_APPLICANT_SOURCING` (default off) |
 | `discovery` (3B) | `discovery_query`, `discovery_batch`, `discovery_result` | — (workflow step) |
-| `identity` | `candidate`, `candidate_source_record`, `candidate_profile_field` | `GET /screening-runs/{run_id}/candidates` |
+| `identity` | (deferred, D-43) `candidate`, `candidate_profile_field`, identity resolution / dedup | — (folded into `applicants` for the MVP; split out when a second source or dedup is needed) |
 | `evidence` | `candidate_evidence` | via `GET /candidates/{candidate_id}/evaluation` |
 | `assessment` | `assessment_session`, `assessment_result` | `POST /webhooks/fusion-mind` |
 | `evaluation` | `candidate_evaluation` | `GET /candidates/{candidate_id}/evaluation` |
